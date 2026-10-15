@@ -46,6 +46,38 @@ class ClockWatch:
         return "ok" if self.progress_seen else "freshness_unverified"
 
 
+class CandidateWatch:
+    """Confirm startup/recovery and abrupt changes; never clamp or average values.
+
+    The 5 C / 2% band triggers an extra observation, not a physical rate limit.
+    A sustained step outside the band can be accepted on the next source tick.
+    """
+    def __init__(self, timeout=15):
+        self.timeout = timeout
+        self.reset()
+
+    def reset(self):
+        self.accepted = self.pending = self.pending_clock = self.seen_at = None
+
+    @staticmethod
+    def near(left, right):
+        return abs(left - right) <= max(5.0, abs(right) * .02)
+
+    def update(self, value, source_clock, now=None):
+        now = time.monotonic() if now is None else now
+        if self.seen_at is not None and now - self.seen_at > self.timeout:
+            self.reset()
+        self.seen_at = now
+        if self.accepted is not None and self.near(value, self.accepted):
+            self.accepted, self.pending, self.pending_clock = value, None, None
+            return True
+        if self.pending is not None and source_clock != self.pending_clock and self.near(value, self.pending):
+            self.accepted, self.pending, self.pending_clock = value, None, None
+            return True
+        self.pending, self.pending_clock = value, source_clock
+        return False
+
+
 def make_record(reading, device_id):
     status = reading.get("status", "source_error")
     return {

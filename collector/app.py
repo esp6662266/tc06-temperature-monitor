@@ -30,7 +30,7 @@ def run_gui(autostart=False):
     config_path = runtime / "config.json"
     config = json.loads(config_path.read_text("utf-8")) if config_path.exists() else {}
     root = tk.Tk()
-    root.title("TC-06 온도 수집기 0.4.0 · 현장 검증 전")
+    root.title("TC-06 온도 수집기 0.4.1 · 현장 검증 전")
     root.geometry("760x690")
     root.minsize(650, 630)
     pane = ttk.Frame(root, padding=18)
@@ -106,7 +106,8 @@ def run_gui(autostart=False):
                 if "reading" in event:
                     reading = event["reading"]
                     value.set(f"{reading['value_c']:.1f} ℃" if reading["status"] == "ok" else "— ℃")
-                    status.set("판독 상태: " + reading["status"] + " / 원본 시계: " + str(reading.get("source_clock") or "미확인"))
+                    confirmation = " · 다음 원본 화면에서 숫자 재확인 중" if reading.get("verification") else ""
+                    status.set("판독 상태: " + reading["status"] + confirmation + " / 원본 시계: " + str(reading.get("source_clock") or "미확인"))
                 if "saved_at" in event:
                     saved.set("로컬 저장: " + event["saved_at"])
                 if "uploaded_at" in event:

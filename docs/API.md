@@ -24,7 +24,7 @@
 
 판독 상태는 `ok`, `anchor_missing`, `ambiguous_anchor`, `occluded`, `ocr_failed`, `value_suspect`, `low_confidence`, `freshness_unverified`, `stale_source`, `source_error`, `window_missing`이다. 실제 창/캡처 예외는 현재 `source_error`로 통합한다.
 
-정지 이미지라도 숫자를 읽었으면 GUI/진단용 `candidate_value_c`에는 나타날 수 있다. 원본 시계 진행 전에는 `freshness_unverified`, 서버 `value_c`는 null이다.
+정지 이미지라도 숫자를 읽었으면 GUI/진단용 `candidate_value_c`에는 나타날 수 있다. 원본 시계 진행 전에는 `freshness_unverified`, 서버 `value_c`는 null이다. v0.4.1은 시작/복구·큰 변화의 추가 확인 대기에도 `value_suspect`와 null을 사용한다. 로컬 `verification=confirm_next_source_tick`은 GUI 진단용이며 서버 기록에 포함하지 않는다.
 
 ## 저장·호환
 

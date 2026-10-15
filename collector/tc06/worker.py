@@ -70,12 +70,14 @@ class Monitor:
                     reading = reader.read(frame, getattr(source, "visible", None))
                     if time.monotonic() - started > 20:
                         reading.update(status="source_error", value_c=None)
+                        reader.invalidate()
                     roi = reading.get("roi")
                     if roi:
                         import cv2
                         x1, y1, x2, y2 = roi
                         self.notify({"crop_png": cv2.imencode(".png", frame[y1:y2, x1:x2])[1].tobytes()})
                 except Exception as error:
+                    reader.invalidate()
                     logging.warning("Capture/OCR error (%s)", type(error).__name__)
                     reading = {"status": "source_error", "value_c": None, "captured_at": utc_now()}
                     if source:

@@ -1,6 +1,6 @@
 import json
 import pytest
-from tc06.core import ClockWatch, Outbox, make_record, parse_temperature
+from tc06.core import CandidateWatch, ClockWatch, Outbox, make_record, parse_temperature
 from tc06.worker import validate_endpoint
 
 
@@ -25,6 +25,22 @@ def test_clock_needs_progress_and_expires_even_if_frames_keep_arriving():
 def test_invalid_reading_is_never_persisted_as_current_temperature():
     record = make_record({"status":"ocr_failed", "value_c":123.4}, "test-pc")
     assert record["value_c"] is None
+
+
+def test_candidate_confirmation_vetoes_a_transient_step_but_accepts_real_high_values():
+    watch = CandidateWatch()
+    assert not watch.update(900, "12:00:00", 0)
+    assert not watch.update(900, "12:00:00", 1)  # Same frozen source tick cannot confirm.
+    assert watch.update(900.1, "12:00:01", 2)
+    assert watch.accepted == 900.1  # No averaging.
+    assert not watch.update(90, "12:00:02", 4)
+    assert watch.update(901, "12:00:03", 6)  # A single bad low reading is dropped.
+    assert not watch.update(1200, "12:00:04", 8)
+    assert watch.update(1200.3, "12:00:05", 10)  # No 900/1000 C cap.
+    assert watch.accepted == 1200.3
+    assert not watch.update(1200.4, "12:01:00", 60)  # Long observation gap.
+    watch.reset()
+    assert not watch.update(1200.5, "12:01:01", 62)
 
 
 def test_offline_queue_survives_restart_deduplicates_and_prioritizes_newest(tmp_path):

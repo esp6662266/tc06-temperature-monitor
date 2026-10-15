@@ -14,9 +14,10 @@ import sys
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 from tc06.core import utc_now
+from tc06.runtime import resolve_ocr, bundled_ocr
 
 
-def run_gui(autostart=False):
+def run_gui(autostart=False, smoke_report=None):
     import tkinter as tk
     from tkinter import ttk, messagebox
     from PIL import Image, ImageTk
@@ -30,7 +31,7 @@ def run_gui(autostart=False):
     config_path = runtime / "config.json"
     config = json.loads(config_path.read_text("utf-8")) if config_path.exists() else {}
     root = tk.Tk()
-    root.title("TC-06 온도 수집기 0.4.1 · 현장 검증 전")
+    root.title("TC-06 온도 수집기 0.5.0")
     root.geometry("760x690")
     root.minsize(650, 630)
     pane = ttk.Frame(root, padding=18)
@@ -42,7 +43,7 @@ def run_gui(autostart=False):
               ("device_index", "캡처보드 번호 (device 사용 시)", "0"),
               ("device_id", "PC 식별자 (영문·숫자·하이픈)", "hmi-room-01"),
               ("server_url", "온도 사이트 주소 (https://...)", "https://tc06-temperature-monitor.netlify.app"),
-              ("tesseract_path", "Tesseract 실행파일", r"C:\Program Files\Tesseract-OCR\tesseract.exe")]
+              ("tesseract_path", "OCR 엔진 (설치판은 내장 엔진 자동 사용)", resolve_ocr(config.get("tesseract_path", "")))]
     for row, (key, label, default) in enumerate(labels):
         ttk.Label(pane, text=label).grid(row=row, column=0, sticky="w", pady=5)
         variable = tk.StringVar(value=str(config.get(key, default)))
@@ -53,6 +54,9 @@ def run_gui(autostart=False):
             widget = ttk.Combobox(pane, textvariable=variable, values=[title for _, title in windows()])
         else:
             widget = ttk.Entry(pane, textvariable=variable)
+            if key == "tesseract_path" and bundled_ocr():
+                variable.set(resolve_ocr())
+                widget.configure(state="readonly")
         widget.grid(row=row, column=1, sticky="ew", pady=5)
     pane.columnconfigure(1, weight=1)
     ttk.Label(pane, text="설정 저장 후에는 프로그램 실행 시 자동으로 수집을 시작합니다.").grid(row=6, column=0, columnspan=2, sticky="w", pady=5)
@@ -137,7 +141,20 @@ def run_gui(autostart=False):
 
     root.protocol("WM_DELETE_WINDOW", close)
     tick()
-    if config.get("server_url") and (config.get("source") == "device" or config.get("window_title")):
+    if smoke_report:
+        def finish_smoke():
+            root.update_idletasks()
+            from PIL import ImageGrab
+            path = Path(smoke_report)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            x, y = root.winfo_rootx(), root.winfo_rooty()
+            ImageGrab.grab(bbox=(x, y, x+root.winfo_width(), y+root.winfo_height())).save(path.with_suffix(".png"))
+            path.write_text(json.dumps({"ok": True, "title": root.title(), "visible": bool(root.winfo_viewable()),
+                            "bundled": bool(getattr(sys, "frozen", False)), "ocr": fields["tesseract_path"].get(),
+                            "capture_started": state["monitor"] is not None}, indent=2), encoding="utf-8")
+            root.destroy()
+        root.after(1000, finish_smoke)
+    elif config.get("server_url") and (config.get("source") == "device" or config.get("window_title")):
         root.after(1000, start)
     root.mainloop()
 
@@ -152,7 +169,12 @@ def main():
     parser.add_argument("--image", help="정지 이미지 로컬 판독 확인; 서버에 전송하지 않음")
     parser.add_argument("--list-windows", action="store_true")
     parser.add_argument("--autostart", action="store_true", help="호환용 옵션: 저장된 설정이 있으면 기본적으로 자동 시작")
+    parser.add_argument("--self-test", metavar="REPORT", help="로컬 합성 OCR 검사 결과를 JSON으로 저장. 캡처·업로드하지 않음")
+    parser.add_argument("--smoke-gui", metavar="REPORT", help="설치 검증용 GUI를 열고 닫음. 캡처·업로드하지 않음")
     args = parser.parse_args()
+    if args.self_test:
+        from tc06.selftest import run
+        sys.exit(run(args.self_test))
     if args.image:
         import cv2
         from tc06.ocr import Reader
@@ -178,7 +200,7 @@ def main():
         ctypes.windll.user32.MessageBoxW(None, "TC-06 수집기가 이미 실행 중입니다.", "TC-06", 0)
         return
     try:
-        run_gui(args.autostart)
+        run_gui(args.autostart, args.smoke_gui)
     finally:
         if instance:
             kernel.CloseHandle.argtypes = [ctypes.c_void_p]

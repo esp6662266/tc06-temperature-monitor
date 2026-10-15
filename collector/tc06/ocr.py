@@ -6,6 +6,7 @@ import numpy as np
 import pytesseract
 from pytesseract import Output
 from .core import CandidateWatch, ClockWatch, parse_temperature, utc_now
+from .runtime import resolve_ocr
 
 
 def clean_tag(text):
@@ -128,8 +129,7 @@ def read_number(crop, min_confidence):
 
 class Reader:
     def __init__(self, tesseract_path="", min_confidence=60, clock_timeout=15):
-        if tesseract_path:
-            pytesseract.pytesseract.tesseract_cmd = tesseract_path
+        pytesseract.pytesseract.tesseract_cmd = resolve_ocr(tesseract_path)
         self.min_confidence = min_confidence
         self.clock = ClockWatch(clock_timeout)
         self.candidate = CandidateWatch(clock_timeout)

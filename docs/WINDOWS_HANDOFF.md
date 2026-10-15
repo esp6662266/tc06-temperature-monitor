@@ -6,6 +6,8 @@
 
 ## 먼저 확인할 환경
 
+일반 사용자는 v0.5 설치판과 [WINDOWS_INSTALL.md](WINDOWS_INSTALL.md)를 먼저 사용한다. 아래 Python/Tesseract 별도 설치는 **소스 개발 실행**에 해당한다. 설치판은 모두 포함한다. 설치판 빌드/설치 검사와 실제 현장 캡처 검증은 구분한다.
+
 1. Windows 10/11 64비트, Python 3.12와 Tcl/Tk, 실제 캡처보드와 HMI/미리보기 창.
 2. 이 프로그램을 **캡처를 보는 별도 PC에 설치하는지**, 실제 HMI 운전 PC에 설치하는지 확인. 기본은 별도 캡처 PC를 권장한다. 부하와 설치 가능 여부는 실제 장비에서 확인한다.
 3. Tesseract의 `eng` 언어 데이터. OS 한국어 음성 설치는 불필요하다.
@@ -67,10 +69,10 @@ Tesseract는 프로젝트 공식 문서에 안내된 Windows 배포 경로를 �
 ## EXE 빌드
 
 ```powershell
-.\scripts\Build-Windows.ps1
+.\scripts\Build-Windows.ps1 -Installer
 ```
 
-성공하면 `dist\TC06Monitor` **폴더 전체**를 배포한다. EXE 하나만 복사하지 않는다. Tesseract는 별도 설치 대상이다. 한국어 음성 설치는 필요 없다. Windows 실행 확인, SHA-256, 빌드 Python 버전, 실제 시험 결과를 검증 문서에 기록하고 그 뒤 릴리스 파일로 올린다. 현재 공개 소스 릴리스에 Windows EXE가 있다고 주장하지 않는다.
+빌드 환경에는 7-Zip과 Inno Setup 6이 필요하다. GitHub의 수동 Windows installer workflow를 사용할 수 있다. 빌드는 고정 URL/SHA-256의 OCR 엔진·영문 데이터를 포함하고 설치판의 실제 합성 OCR·GUI·삭제 검사를 수행한다. 결과는 `dist\release`다. `TC06Monitor-Setup-...exe` 또는 포터블 ZIP 전체를 배포한다. EXE만 복사하지 않는다. 현장 캡처·TV 재생은 별도로 검증한다.
 
 ## 현장 시험
 

@@ -1,3 +1,4 @@
+import { updateTrend, getTrend } from './trend.mjs';
 import { RETENTION_DAYS, dayKST, oldestDay, expired } from './retention.mjs';
 
 const STATUSES = new Set(['ok', 'anchor_missing', 'ambiguous_anchor', 'occluded', 'ocr_failed',
@@ -83,6 +84,7 @@ export function createAPI(getStore) {
         await store.setJSON(key, stored, { onlyIfNew: true });
         // Use canonical first-write content on retries; immutable record history.
         const canonical = await store.get(key, { type: 'json', consistency: 'strong' });
+        await updateTrend(store, canonical);
         await updateLatest(store, canonical);
         return json({ saved: true, id: canonical.id });
       } catch { return json({ error: '저장 실패. 같은 id로 재전송하세요' }, 503); }
@@ -100,6 +102,10 @@ export function createAPI(getStore) {
       if (action === 'audio') return json({ error: '웹 숫자 TTS로 전환되어 서버 음성 저장을 종료했습니다' }, 410);
       if (action === 'retention') return json({ retention_days: RETENTION_DAYS, oldest_day: oldestDay(), timezone: 'Asia/Seoul',
         cleanup_schedule: '매시 15분', last_cleanup: await store.get('maintenance/retention', { type: 'json' }) });
+      if (action === 'trend') {
+        const result=await getTrend(store,{day:url.searchParams.get('day')||dayKST(Date.now()),minutes:Number(url.searchParams.get('minutes')||1),span:Number(url.searchParams.get('span')||360)});
+        return json(result,result.status||200);
+      }
       if (action === 'history') {
         const day = url.searchParams.get('day') || dayKST(new Date().toISOString());
         if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !Number.isFinite(Date.parse(day)) || new Date(day).toISOString().slice(0,10) !== day) return json({ error: 'Invalid date' }, 400);

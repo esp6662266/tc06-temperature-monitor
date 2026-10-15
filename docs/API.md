@@ -7,6 +7,7 @@
 | POST /api/ingest | `{record}` 온도 텍스트 저장 |
 | GET /api/latest | 최신 기록·서버 시각·fresh·30일 보관 경계 |
 | GET /api/history?day=YYYY-MM-DD | 해당 한국 날짜 CSV. 만료 날짜는 410 |
+| GET /api/trend?day=YYYY-MM-DD&minutes=1&span=360 | 온도 봉 JSON |
 | GET /api/retention | 보관 정책·최근 자동 정리 결과 |
 | GET /api/audio | 410: 서버 음성 저장 종료 |
 
@@ -46,3 +47,13 @@
 만료 latest는 ETag 조건부 null 처리하여 동시에 들어온 새 값을 보존한다. 물리 삭제 전에도 만료 데이터 조회·재수신은 차단한다. PC SQLite 이력은 별도이며 서버 정리로 삭제되지 않는다.
 
 `/api/retention`은 `retention_days`, `oldest_day`, `timezone`, `cleanup_schedule`, `last_cleanup`을 반환한다. `last_cleanup`에는 실행 시각, 기록/음성 삭제 수, 최신값 정리 여부와 한도 도달 여부가 있다. 삭제 함수는 공개 URL로 실행할 수 없다.
+
+## 그래프 API (v0.4)
+
+`minutes`는 1/5/10, `span`은 60/360/1440분이다. `day`는 한국 날짜이며 생략하면 오늘이다. 미래/잘못된 날짜와 지원하지 않는 단위는 400, 보관 만료 날짜는 410이다.
+
+오늘의 종료 시각은 현재, 과거 날짜는 그날 종료 자정이다. 최근 span만큼 역산하므로 오늘 6시간 조회는 전날을 포함할 수 있다. 보관 시작 날짜보다 이전은 자른다. 봉은 한국시간 분 경계에 정렬한다.
+
+응답 `bars`는 `time`, `open`, `high`, `low`, `close`, `count`, `invalid_count`, `complete`다. 정상 기록이 없으면 온도 네 항목은 null이며 실패/공백을 0이나 38로 바꾸지 않는다. `complete`는 해당 시간 구간이 끝났는지다. `samples`, `invalid_samples`, `low`, `high`, `start`, `end`, `server_now`, `oldest_day`도 반환한다.
+
+색인 `trend/YYYY-MM-DD`는 버전·날짜·이전 이력 스캔 완료 여부와 `{UUID: [캡처 epoch ms, 값 또는 null, 상태, 기록 epoch ms]}`를 보관한다. ETag 조건부 병합으로 동시에 저장한 값·과거 재전송·중복 재전송을 보존한다. 최초 조회에서 이전 `records`를 한 번 병합하고, 이후 조회는 색인 1~2개만 읽는다. 30일 정리에 `trend/날짜`도 포함된다. 음성·이미지를 색인에 저장하지 않는다.

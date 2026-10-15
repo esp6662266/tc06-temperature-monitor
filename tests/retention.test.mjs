@@ -30,3 +30,7 @@ test('clearing an expired latest cannot overwrite a simultaneous new upload',asy
  store.getWithMetadata=async(...args)=>{const result=await get(...args);if(args[0]==='latest')await store.setJSON('latest',fresh);return result;};
  const result=await cleanupStore(store,{now});assert.equal(result.cleared_latest,false);assert.deepEqual(await store.get('latest',{type:'json'}),fresh);
 });
+test('graph summary retention matches the records policy',async()=>{
+ const store=new MemoryStore();await store.setJSON('trend/2026-09-16',{rows:{old:'expired'}});await store.setJSON('trend/2026-09-17',{rows:{kept:'retained'}});await store.set('trend/unknown-key','unknown');
+ const result=await cleanupStore(store,{now});assert.equal(result.deleted_trends,1);assert.equal(await store.get('trend/2026-09-16'),null);assert.ok(await store.get('trend/2026-09-17'));assert.equal(await store.get('trend/unknown-key'),'unknown');
+});

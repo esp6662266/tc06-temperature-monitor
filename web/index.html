@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#000000"><title>TC-06 · 현장 온도</title>
-  <link rel="stylesheet" href="/style.css"><script defer src="/voice.js"></script><script defer src="/app.js"></script>
+  <link rel="stylesheet" href="/style.css"><script defer src="/voice.js"></script><script defer src="/graph.js"></script><script defer src="/app.js"></script>
 </head>
 <body data-mode="display">
   <main>
@@ -13,7 +13,7 @@
       <div class="temperature"><span id="temperature">38</span><span class="unit">℃</span></div>
       <p id="status" role="status">기본값 38도를 표시합니다.</p>
       <div class="metadata"><div><span>마지막 판독</span><strong id="captured">—</strong></div><div><span>서버 저장</span><strong id="received">—</strong></div><div><span>다음 음성 안내</span><strong id="countdown">꺼짐</strong></div></div>
-      <div class="controls"><button id="speech-start">음성 안내 시작</button><button id="speech-stop" class="secondary" disabled>안내 중지</button><button id="display-mode" class="secondary">숫자 디스플레이</button><button id="fullscreen" class="secondary">전체 화면</button></div>
+      <div class="controls"><button id="speech-start">음성 안내 시작</button><button id="speech-stop" class="secondary" disabled>안내 중지</button><button id="display-mode" class="secondary">숫자 디스플레이</button><button id="graph-mode" class="secondary">온도 그래프</button><button id="fullscreen" class="secondary">전체 화면</button></div>
       <p id="audio-status" class="note" role="status">음성 안내 시작을 누르면 웹 숫자 TTS가 1분마다 안내합니다. 운영체제의 한국어 음성 설치는 필요 없습니다.</p>
       <section class="settings" aria-label="표시 및 음성 설정"><h2>화면 · 음성 설정</h2><div class="settings-grid">
         <label>음량<input id="volume" aria-label="음량" type="range" min="0" max="1" value="0.8" step="0.05"></label>
@@ -25,6 +25,13 @@
     </section>
     <footer><span>1분 간격 저장 · 한국시간 표시</span><span id="updated">아직 수신한 값이 없습니다</span></footer>
   </main>
-  <nav id="display-menu" aria-label="디스플레이 메뉴" hidden><button id="normal-mode">일반 화면</button><button id="display-speech" class="secondary">음성 시작</button><button id="display-fullscreen" class="secondary">전체 화면</button></nav>
+  <section id="graph-screen" aria-label="TC-06 온도 추이 그래프" hidden>
+    <header class="graph-header"><div><span class="eyebrow">TC-06 · 현재 온도</span><div class="graph-reading"><strong id="graph-temperature">38</strong><span>℃</span><span id="graph-quality" class="badge">기본값 · 38도</span></div><p id="graph-current-status" class="note">수신 상태 확인 중</p></div><div class="graph-navigation"><button id="graph-to-display" class="secondary">숫자 화면</button><button id="graph-to-normal" class="secondary">일반 화면</button><button id="graph-speech" class="secondary">음성 시작</button><button id="graph-fullscreen">전체 화면</button></div></header>
+    <div class="graph-toolbar"><div class="graph-intervals" role="group" aria-label="봉 간격"><button data-minutes="1" aria-pressed="true">1분봉</button><button data-minutes="5" aria-pressed="false">5분봉</button><button data-minutes="10" aria-pressed="false">10분봉</button></div><label>조회 범위<select id="graph-span"><option value="60">최근 1시간</option><option value="360" selected>최근 6시간</option><option value="1440">최근 24시간</option></select></label><label>기준 날짜<input id="graph-day" type="date"></label><button id="graph-live" class="secondary">오늘</button><button id="graph-refresh" class="secondary">새로고침</button></div>
+    <div class="graph-summary"><span id="graph-period">한국시간</span><span>범위 최저 <strong id="graph-low">—</strong> · 최고 <strong id="graph-high">—</strong></span><span class="chart-legend"><i class="legend-up"></i>상승 <i class="legend-down"></i>하락 <i class="legend-flat"></i>동일 · 세로축 자동 범위</span></div>
+    <div id="chart-wrap"><svg id="trend-chart" role="img" aria-label="TC-06 온도 봉 그래프. 좌우 방향키로 봉 상세를 확인할 수 있습니다." tabindex="0"></svg><p id="graph-empty">저장된 온도 이력을 불러오세요.</p></div>
+    <div id="graph-detail" aria-live="polite">기본값 38도는 그래프 기록에 넣지 않습니다.</div><p id="graph-status" role="status">저장 이력 대기 · 기본값 38도는 그래프에 넣지 않습니다.</p>
+  </section>
+  <nav id="display-menu" aria-label="디스플레이 메뉴" hidden><button id="normal-mode">일반 화면</button><button id="display-to-graph" class="secondary">그래프</button><button id="display-speech" class="secondary">음성 시작</button><button id="display-fullscreen" class="secondary">전체 화면</button></nav>
 </body>
 </html>

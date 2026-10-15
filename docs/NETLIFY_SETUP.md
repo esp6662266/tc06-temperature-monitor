@@ -1,6 +1,7 @@
-# Netlify 설정 · v0.3
+# Netlify 설정 · v0.4
 
 운영: https://tc06-temperature-monitor.netlify.app/
+그래프: https://tc06-temperature-monitor.netlify.app/?mode=graph
 일반 화면: https://tc06-temperature-monitor.netlify.app/?mode=normal
 
 Site ID: `67ba3ef2-67cd-4fdb-afdb-bd303748108c`
@@ -27,6 +28,7 @@ netlify deploy --prod --site 67ba3ef2-67cd-4fdb-afdb-bd303748108c --dir web --fu
 
 - `records/한국날짜/UUID`: 불변 온도 텍스트 기록.
 - `latest`: 최신 기록. 동시 요청·과거 재전송은 ETag 조건부 쓰기로 보호한다.
+- `trend/한국날짜`: 온도 그래프 색인. 기록 저장 시 조건부 병합, 예전 이력은 최초 조회 시 한 번 색인화, 동일 30일 삭제 정책.
 - `maintenance/retention`: 최근 정리 실행 시각·삭제 수·한도 도달 여부.
 - 이전 `audio/SHA256`, `audio/notice-stale`는 정리 함수가 삭제한다. 새 음성 필드는 저장하지 않는다.
 

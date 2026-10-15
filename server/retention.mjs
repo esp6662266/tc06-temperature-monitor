@@ -12,7 +12,7 @@ export function expired(record, now = Date.now()) {
 export async function cleanupStore(store, { now = Date.now(), limit = 2000, budgetMs = 22000 } = {}) {
   const started = Date.now(), cutoff = oldestDay(now);
   const summary = { ran_at: new Date(now).toISOString(), retention_days: RETENTION_DAYS,
-    oldest_day: cutoff, deleted_records: 0, deleted_audio: 0, cleared_latest: false, limit_reached: false };
+    oldest_day: cutoff, deleted_records: 0, deleted_audio: 0, deleted_trends: 0, cleared_latest: false, limit_reached: false };
   const dates = new Set();
   for await (const page of store.list({ prefix: 'records/', directories: true, paginate: true })) {
     for (const directory of page.directories || []) {
@@ -20,18 +20,19 @@ export async function cleanupStore(store, { now = Date.now(), limit = 2000, budg
       if (match && match[1] < cutoff) dates.add(match[1]);
     }
   }
-  const prefixes = [...[...dates].sort().map(day => `records/${day}/`), 'audio/'];
+  const prefixes = [...[...dates].sort().map(day => `records/${day}/`), 'audio/', 'trend/'];
   const recordPattern = /^records\/\d{4}-\d{2}-\d{2}\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   outer: for (const prefix of prefixes) {
     for await (const page of store.list({ prefix, paginate: true })) {
       const keys = page.blobs.map(blob => blob.key).filter(key => prefix === 'audio/'
-        ? /^audio\/(?:[a-f0-9]{64}|notice-stale)$/.test(key) : recordPattern.test(key));
+        ? /^audio\/(?:[a-f0-9]{64}|notice-stale)$/.test(key) : prefix === 'trend/' ? /^trend\/\d{4}-\d{2}-\d{2}$/.test(key) && key.slice(6)<cutoff : recordPattern.test(key));
       for (let i = 0; i < keys.length; i += 20) {
-        const count = summary.deleted_records + summary.deleted_audio;
+        const count = summary.deleted_records + summary.deleted_audio + summary.deleted_trends;
         if (count >= limit || Date.now() - started >= budgetMs) { summary.limit_reached = true; break outer; }
         const batch = keys.slice(i, Math.min(i + 20, i + limit - count));
         await Promise.all(batch.map(key => store.delete(key)));
         if (prefix === 'audio/') summary.deleted_audio += batch.length;
+        else if (prefix === 'trend/') summary.deleted_trends += batch.length;
         else summary.deleted_records += batch.length;
         if (batch.length < Math.min(20, keys.length-i)) { summary.limit_reached = true; break outer; }
       }

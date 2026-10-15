@@ -18,7 +18,7 @@ settings.color=[...Object.keys(PALETTES),'custom'].includes(settings.color)?sett
 settings.customColor=/^#[0-9a-f]{6}$/i.test(settings.customColor)?settings.customColor:'#ffffff';
 settings.size=Math.max(50,Math.min(100,Number(settings.size)||90));
 let latest=null,serverOffset=0,networkOK=false,enabled=false,nextAnnouncement=0,announcing=false,refreshPromise=null;
-let menuTimer=null;
+let menuTimer=null,graph=null;
 const labels={anchor_missing:'TC-06을 찾을 수 없습니다',ambiguous_anchor:'TC-06 표시가 여러 개입니다',occluded:'온도 영역이 다른 창에 가려졌습니다',ocr_failed:'온도를 판독할 수 없습니다',value_suspect:'숫자 재확인이 필요합니다',low_confidence:'숫자가 선명하지 않습니다',freshness_unverified:'원본 시계의 진행을 확인 중입니다',stale_source:'원본 영상 정지가 의심됩니다',source_error:'영상 입력을 확인해 주세요',window_missing:'HMI 창을 확인해 주세요'};
 const formatTime=iso=>iso?new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date(iso)):'—';
 function fresh(){const age=Date.now()+serverOffset-Date.parse(latest?.captured_at);return networkOK&&age>=-30000&&age<=150000;}
@@ -34,6 +34,7 @@ function render(){
   byId('captured').textContent=formatTime(latest?.captured_at);byId('received').textContent=formatTime(latest?.received_at);
   byId('connection').textContent=networkOK?'서버 연결됨':'서버 연결 확인 필요';
   byId('countdown').textContent=enabled?`${Math.max(0,Math.ceil((nextAnnouncement-Date.now())/1000))}초`:'꺼짐';
+  byId('graph-temperature').textContent=text;byId('graph-quality').textContent=byId('quality').textContent;byId('graph-current-status').textContent=valid?`판독 ${formatTime(latest.captured_at)} · 서버 ${networkOK?'연결됨':'연결 확인 필요'}`:reason+' 기본값 38도 표시';byId('graph-speech').textContent=enabled?'음성 중지':'음성 시작';
   byId('speech-start').disabled=enabled;byId('speech-stop').disabled=!enabled;byId('display-speech').textContent=enabled?'음성 중지':'음성 시작';
 }
 function refresh(){
@@ -60,8 +61,8 @@ async function start(){
   catch(error){enabled=false;voice.cancel();byId('audio-status').textContent=error.message||'음성 시작을 다시 눌러 주세요.';render();}
 }
 function stop(){enabled=false;voice.cancel();byId('audio-status').textContent='음성 안내가 꺼져 있습니다.';render();}
-async function fullscreen(){setMode('display');try{if(!document.fullscreenElement)await document.documentElement.requestFullscreen();}catch{byId('audio-status').textContent='브라우저 메뉴에서 전체 화면을 선택해 주세요.';}}
-function setMode(mode,save=true){document.body.dataset.mode=mode;if(mode==='normal')byId('temperature').style.fontSize='';byId('display-menu').hidden=true;clearTimeout(menuTimer);if(save){const url=new URL(location.href);url.searchParams.set('mode',mode);history.replaceState(null,'',url);}fitNumber();}
+async function fullscreen(mode='display'){if(typeof mode!=='string')mode='display';setMode(mode);try{if(!document.fullscreenElement)await document.documentElement.requestFullscreen();}catch{byId('audio-status').textContent='브라우저 메뉴에서 전체 화면을 선택해 주세요.';}}
+function setMode(mode,save=true){document.activeElement?.blur();document.body.dataset.mode=mode;byId('graph-screen').hidden=mode!=='graph';if(mode==='normal')byId('temperature').style.fontSize='';byId('display-menu').hidden=true;clearTimeout(menuTimer);if(save){const url=new URL(location.href);url.searchParams.set('mode',mode);history.replaceState(null,'',url);}fitNumber();if(mode==='graph'){graph?.draw();graph?.load();}}
 function revealMenu(){if(document.body.dataset.mode!=='display')return;byId('display-menu').hidden=false;clearTimeout(menuTimer);menuTimer=setTimeout(()=>{byId('display-menu').hidden=true;},5000);}
 function applySettings(){for(const key of ['volume','interval','color','size'])byId(key).value=settings[key];byId('custom-color').value=settings.customColor;voice.setVolume(settings.volume);const palette=settings.color==='custom'?{fg:settings.customColor,bg:'#000000'}:PALETTES[settings.color];document.documentElement.style.setProperty('--display-color',palette.fg);document.documentElement.style.setProperty('--display-bg',palette.bg);for(const button of byId('palettes').children)button.setAttribute('aria-pressed',String(button.dataset.palette===settings.color));fitNumber();}
 for(const [key,palette] of Object.entries(PALETTES)){const button=document.createElement('button');button.type='button';button.dataset.palette=key;button.className='palette';button.style.backgroundColor=palette.bg;button.style.color=palette.fg;const number=document.createElement('span');number.className='palette-number';number.textContent='38';const label=document.createElement('span');label.textContent=palette.label;button.append(number,label);button.addEventListener('click',()=>{settings.color=key;try{localStorage.setItem('tc06-settings-v2',JSON.stringify(settings));}catch{}applySettings();});byId('palettes').append(button);}
@@ -70,10 +71,12 @@ byId('custom-color').addEventListener('input',()=>{settings.customColor=byId('cu
 byId('speech-start').addEventListener('click',start);byId('speech-stop').addEventListener('click',stop);byId('display-speech').addEventListener('click',()=>enabled?stop():start());
 byId('fullscreen').addEventListener('click',fullscreen);byId('display-fullscreen').addEventListener('click',fullscreen);
 byId('display-mode').addEventListener('click',()=>{setMode('display');fullscreen();});byId('normal-mode').addEventListener('click',()=>setMode('normal'));
-document.addEventListener('pointerdown',revealMenu);document.addEventListener('keydown',event=>{if(event.key==='Escape')setMode('normal');else if(['Enter','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Tab'].includes(event.key))revealMenu();});window.addEventListener('resize',fitNumber);document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&document.body.dataset.mode==='display')setMode('normal');});
+byId('graph-mode').addEventListener('click',()=>setMode('graph'));byId('display-to-graph').addEventListener('click',()=>setMode('graph'));byId('graph-to-display').addEventListener('click',()=>setMode('display'));byId('graph-to-normal').addEventListener('click',()=>setMode('normal'));byId('graph-fullscreen').addEventListener('click',()=>fullscreen('graph'));byId('graph-speech').addEventListener('click',()=>enabled?stop():start());
+document.addEventListener('pointerdown',revealMenu);document.addEventListener('keydown',event=>{if(event.key==='Escape')setMode('normal');else if(['Enter','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Tab'].includes(event.key))revealMenu();});window.addEventListener('resize',fitNumber);document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&['display','graph'].includes(document.body.dataset.mode))setMode('normal');});
 byId('history-day').value=new Date(Date.now()+9*3600000).toISOString().slice(0,10);byId('download').addEventListener('click',()=>{location.href='/api/history?day='+encodeURIComponent(byId('history-day').value);});
-document.addEventListener('visibilitychange',()=>{if(document.hidden){voice.cancel();}else refresh();});window.addEventListener('offline',()=>{networkOK=false;render();});window.addEventListener('online',refresh);
-setInterval(()=>{if(!document.hidden)refresh();},60000);setInterval(()=>{render();if(enabled&&Date.now()>=nextAnnouncement){nextAnnouncement=Date.now()+settings.interval*1000;announce();}},1000);
-setMode(new URLSearchParams(location.search).get('mode')==='normal'?'normal':'display',false);applySettings();render();refresh();voice.preload().catch(()=>{});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){voice.cancel();}else{refresh();graph?.load();}});window.addEventListener('offline',()=>{networkOK=false;render();});window.addEventListener('online',()=>{refresh();graph?.load(true);});
+setInterval(()=>{if(!document.hidden){refresh();graph?.load();}},60000);setInterval(()=>{render();if(enabled&&Date.now()>=nextAnnouncement){nextAnnouncement=Date.now()+settings.interval*1000;announce();}},1000);
+graph=new TC06Graph.Graph(()=>Date.now()+serverOffset);
+const initialMode=new URLSearchParams(location.search).get('mode');setMode(['normal','graph'].includes(initialMode)?initialMode:'display',false);applySettings();render();refresh();voice.preload().catch(()=>{});
 fetch('/api/retention',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(data=>{if(data?.last_cleanup)byId('retention-status').textContent=`최근 30일 보관 (한국날짜 기준) · 매시 15분 자동 삭제 · 최근 정리 ${formatTime(data.last_cleanup.ran_at)}`;}).catch(()=>{});
 if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});

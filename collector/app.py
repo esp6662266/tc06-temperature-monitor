@@ -30,7 +30,7 @@ def run_gui(autostart=False):
     config_path = runtime / "config.json"
     config = json.loads(config_path.read_text("utf-8")) if config_path.exists() else {}
     root = tk.Tk()
-    root.title("TC-06 온도 수집기 0.3.0 · 현장 검증 전")
+    root.title("TC-06 온도 수집기 0.4.0 · 현장 검증 전")
     root.geometry("760x690")
     root.minsize(650, 630)
     pane = ttk.Frame(root, padding=18)

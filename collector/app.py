@@ -30,7 +30,7 @@ def run_gui(autostart=False):
     config_path = runtime / "config.json"
     config = json.loads(config_path.read_text("utf-8")) if config_path.exists() else {}
     root = tk.Tk()
-    root.title("TC-06 온도 수집기 0.1.0 · 현장 검증 전")
+    root.title("TC-06 온도 수집기 0.2.0 · 현장 검증 전")
     root.geometry("760x690")
     root.minsize(650, 630)
     pane = ttk.Frame(root, padding=18)
@@ -41,7 +41,7 @@ def run_gui(autostart=False):
               ("window_title", "HMI 또는 미리보기 창의 정확한 제목", ""),
               ("device_index", "캡처보드 번호 (device 사용 시)", "0"),
               ("device_id", "PC 식별자 (영문·숫자·하이픈)", "hmi-room-01"),
-              ("server_url", "온도 사이트 주소 (https://...)", ""),
+              ("server_url", "온도 사이트 주소 (https://...)", "https://tc06-temperature-monitor.netlify.app"),
               ("tesseract_path", "Tesseract 실행파일", r"C:\Program Files\Tesseract-OCR\tesseract.exe")]
     for row, (key, label, default) in enumerate(labels):
         ttk.Label(pane, text=label).grid(row=row, column=0, sticky="w", pady=5)

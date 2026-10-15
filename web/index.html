@@ -1,26 +1,31 @@
 <!doctype html>
 <html lang="ko">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TC-06 · 현장 온도</title>
-  <link rel="stylesheet" href="/style.css">
-  <script defer src="/app.js"></script>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#000000"><title>TC-06 · 현장 온도</title>
+  <link rel="stylesheet" href="/style.css"><script defer src="/app.js"></script>
 </head>
-<body>
+<body data-mode="display">
   <main>
     <header><div class="brand"><span class="mark">T</span><span>현장 온도 모니터</span></div><span id="connection" class="badge">연결 확인 중</span></header>
     <section id="monitor-panel" aria-labelledby="asset-title">
-      <div class="heading"><div><span class="eyebrow">DECOATER · 온도 감시</span><h1 id="asset-title">TC-06</h1></div><span id="quality" class="badge">데이터 대기</span></div>
-      <div class="temperature"><span id="temperature">—</span><span class="unit">℃</span></div>
-      <p id="status" role="status">저장된 온도를 확인하고 있습니다.</p>
+      <div class="heading"><div><span class="eyebrow">DECOATER · 온도 감시</span><h1 id="asset-title">TC-06</h1></div><span id="quality" class="badge">기본값 · 38도</span></div>
+      <div class="temperature"><span id="temperature">38</span><span class="unit">℃</span></div>
+      <p id="status" role="status">기본값 38도를 표시합니다.</p>
       <div class="metadata"><div><span>마지막 판독</span><strong id="captured">—</strong></div><div><span>서버 저장</span><strong id="received">—</strong></div><div><span>다음 음성 안내</span><strong id="countdown">꺼짐</strong></div></div>
-      <div class="controls"><button id="speech-start">음성 안내 시작</button><button id="speech-stop" class="secondary" disabled>안내 중지</button><label class="volume">음량<input id="volume" aria-label="음량" type="range" min="0" max="1" value="0.8" step="0.05"></label><button id="fullscreen" class="secondary">전체 화면</button></div>
+      <div class="controls"><button id="speech-start">음성 안내 시작</button><button id="speech-stop" class="secondary" disabled>안내 중지</button><button id="display-mode" class="secondary">숫자 디스플레이</button><button id="fullscreen" class="secondary">전체 화면</button></div>
       <p id="audio-status" class="note" role="status">음성 안내 시작을 누르면 1분마다 안내합니다.</p>
+      <section class="settings" aria-label="표시 및 음성 설정"><h2>화면 · 음성 설정</h2><div class="settings-grid">
+        <label>음량<input id="volume" aria-label="음량" type="range" min="0" max="1" value="0.8" step="0.05"></label>
+        <label>음성 반복 간격<select id="interval"><option value="60">1분</option><option value="120">2분</option><option value="300">5분</option></select></label>
+        <label>디스플레이 색상 조합<select id="color"><option value="white">검정 바탕 · 흰 숫자</option><option value="amber">검정 바탕 · 노란 숫자 ★ 추천</option><option value="mint">검정 바탕 · 민트 숫자</option><option value="cyan">검정 바탕 · 하늘 숫자</option><option value="orange">검정 바탕 · 주황 숫자</option><option value="navy">남색 바탕 · 흰 숫자</option><option value="yellow">노랑 바탕 · 검정 숫자</option><option value="custom">검정 바탕 · 직접 선택</option></select><input id="custom-color" type="color" aria-label="직접 숫자 색상 선택" value="#ffffff"><span class="color-preview" aria-hidden="true">38</span></label>
+        <label>디스플레이 숫자 크기<input id="size" aria-label="숫자 크기" type="range" min="50" max="100" value="90" step="5"></label>
+      </div><h3>현장 추천 색상 7가지</h3><div id="palettes" class="palettes" role="group" aria-label="추천 색상 조합"></div><p class="note">설정은 이 브라우저에 저장됩니다. 기본값은 38도, 음성 주기는 1분입니다. 연결 끊김·판독 실패·150초 이상 지난 값은 기본값 38도로 표시하고 안내합니다. 기본값은 실제 측정 기록으로 저장하지 않습니다.</p><p class="note">디스플레이에서 화면을 누르거나 리모컨 Enter를 누르면 메뉴가 나옵니다. Esc 또는 ‘일반 화면’을 누르면 돌아옵니다. 전체 화면과 음성은 브라우저에서 처음 한 번 조작이 필요할 수 있습니다.</p></section>
       <details><summary>기록 다운로드</summary><div class="history"><label>기록 일자 (한국시간)<input id="history-day" type="date"></label><button id="download" class="secondary">CSV 다운로드</button></div><p class="note">영상에서 읽은 참고 표시값입니다. 운전·보호 판단은 기존 HMI에서 확인하세요.</p></details>
     </section>
     <footer><span>1분 간격 저장 · 한국시간 표시</span><span id="updated">아직 수신한 값이 없습니다</span></footer>
   </main>
+  <nav id="display-menu" aria-label="디스플레이 메뉴" hidden><button id="normal-mode">일반 화면</button><button id="display-speech" class="secondary">음성 시작</button><button id="display-fullscreen" class="secondary">전체 화면</button></nav>
   <audio id="audio" preload="auto"></audio>
 </body>
 </html>

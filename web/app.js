@@ -1,7 +1,6 @@
 'use strict';
 const byId = id => document.getElementById(id);
-const player = byId('audio');
-const FALLBACK_AUDIO = '/audio/fallback-38.mp3';
+const voice = new TC06Voice.NumberVoice();
 const PALETTES={
  white:{fg:'#ffffff',bg:'#000000',label:'검정 · 흰색'},
  amber:{fg:'#ffe600',bg:'#000000',label:'검정 · 노랑 ★'},
@@ -19,7 +18,7 @@ settings.color=[...Object.keys(PALETTES),'custom'].includes(settings.color)?sett
 settings.customColor=/^#[0-9a-f]{6}$/i.test(settings.customColor)?settings.customColor:'#ffffff';
 settings.size=Math.max(50,Math.min(100,Number(settings.size)||90));
 let latest=null,serverOffset=0,networkOK=false,enabled=false,nextAnnouncement=0,announcing=false,refreshPromise=null;
-let fallbackURL=null,menuTimer=null;
+let menuTimer=null;
 const labels={anchor_missing:'TC-06을 찾을 수 없습니다',ambiguous_anchor:'TC-06 표시가 여러 개입니다',occluded:'온도 영역이 다른 창에 가려졌습니다',ocr_failed:'온도를 판독할 수 없습니다',value_suspect:'숫자 재확인이 필요합니다',low_confidence:'숫자가 선명하지 않습니다',freshness_unverified:'원본 시계의 진행을 확인 중입니다',stale_source:'원본 영상 정지가 의심됩니다',source_error:'영상 입력을 확인해 주세요',window_missing:'HMI 창을 확인해 주세요'};
 const formatTime=iso=>iso?new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date(iso)):'—';
 function fresh(){const age=Date.now()+serverOffset-Date.parse(latest?.captured_at);return networkOK&&age>=-30000&&age<=150000;}
@@ -44,29 +43,27 @@ function refresh(){
     catch{networkOK=false;}finally{clearTimeout(timeout);render();}
   })().finally(()=>{refreshPromise=null;});return refreshPromise;
 }
-async function cacheFallback(){try{const response=await fetch(FALLBACK_AUDIO);if(response.ok)fallbackURL=URL.createObjectURL(await response.blob());}catch{/* Service worker or browser synthesis can supply the offline fallback. */}}
-function browserSpeak(value){
-  if(!('speechSynthesis' in window))return false;
-  const voices=speechSynthesis.getVoices();const voice=voices.find(v=>/^ko[-_]KR/i.test(v.lang)&&/Yuna|유나|Heami|해미|SunHi|선히|female|여성/i.test(v.name));
-  if(!voice)return false;
-  const utterance=new SpeechSynthesisUtterance(`현재 온도는 ${value}도입니다.`);utterance.lang='ko-KR';utterance.voice=voice;utterance.volume=settings.volume;speechSynthesis.cancel();speechSynthesis.speak(utterance);return true;
-}
 async function announce(){
   if(!enabled||announcing||document.hidden)return;announcing=true;
-  try{await refresh();if(!enabled)return;
-    if(good()&&!latest.has_audio){if(browserSpeak(latest.value_c)){byId('audio-status').textContent='이 기기의 한국어 여성 음성으로 안내 중';return;}byId('audio-status').textContent='실제 온도의 음성 파일이 없습니다. PC의 한국어 여성 음성 생성을 확인하세요.';return;}
-    player.src=good()?'/api/audio?id='+encodeURIComponent(latest.audio_id):fallbackURL||FALLBACK_AUDIO;player.volume=settings.volume;
-    try{await player.play();}catch(error){if(!good()&&browserSpeak(38)){byId('audio-status').textContent='기본값 38도 · 이 기기의 한국어 여성 음성 안내';return;}throw error;}
-    byId('audio-status').textContent=good()?`실제 수신 온도 · ${settings.interval/60}분마다 한국어 여성 음성 안내`:`기본값 38도 · ${settings.interval/60}분마다 한국어 여성 음성 안내`;
-  }catch{byId('audio-status').textContent='음성 시작을 눌러 주세요. 브라우저 소리 재생 권한과 음성 파일을 확인하세요.';}finally{announcing=false;}
+  try{
+    await refresh();if(!enabled)return;
+    const valid=good(),value=valid?latest.value_c:38;
+    const played=await voice.say(value,settings.volume);
+    if(played&&enabled)byId('audio-status').textContent=`${valid?'실제 수신 온도':'기본값 38도'} · 웹 숫자 TTS · ${settings.interval/60}분마다 한국어 여성 음성 안내`;
+  }catch(error){byId('audio-status').textContent=error.message||'음성 시작을 다시 눌러 주세요.';}
+  finally{announcing=false;}
 }
-function silentWav(){const buffer=new ArrayBuffer(844),v=new DataView(buffer);const str=(at,text)=>[...text].forEach((c,i)=>v.setUint8(at+i,c.charCodeAt(0)));str(0,'RIFF');v.setUint32(4,836,true);str(8,'WAVE');str(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,8000,true);v.setUint32(28,16000,true);v.setUint16(32,2,true);v.setUint16(34,16,true);str(36,'data');v.setUint32(40,800,true);return URL.createObjectURL(new Blob([buffer],{type:'audio/wav'}));}
-async function start(){if(enabled)return;const unlock=silentWav();try{player.src=unlock;player.volume=settings.volume;await player.play();enabled=true;nextAnnouncement=Date.now()+settings.interval*1000;render();await announce();}catch{byId('audio-status').textContent='음성 시작이 차단됐습니다. 브라우저의 소리 재생 설정을 확인하세요.';}finally{URL.revokeObjectURL(unlock);}}
-function stop(){enabled=false;player.pause();if('speechSynthesis'in window)speechSynthesis.cancel();byId('audio-status').textContent='음성 안내가 꺼져 있습니다.';render();}
+async function start(){
+  if(enabled)return;enabled=true;nextAnnouncement=Date.now()+settings.interval*1000;render();
+  byId('audio-status').textContent='웹 숫자 TTS를 준비하고 있습니다.';
+  try{await voice.unlock(settings.volume);if(enabled)await announce();}
+  catch(error){enabled=false;voice.cancel();byId('audio-status').textContent=error.message||'음성 시작을 다시 눌러 주세요.';render();}
+}
+function stop(){enabled=false;voice.cancel();byId('audio-status').textContent='음성 안내가 꺼져 있습니다.';render();}
 async function fullscreen(){setMode('display');try{if(!document.fullscreenElement)await document.documentElement.requestFullscreen();}catch{byId('audio-status').textContent='브라우저 메뉴에서 전체 화면을 선택해 주세요.';}}
 function setMode(mode,save=true){document.body.dataset.mode=mode;if(mode==='normal')byId('temperature').style.fontSize='';byId('display-menu').hidden=true;clearTimeout(menuTimer);if(save){const url=new URL(location.href);url.searchParams.set('mode',mode);history.replaceState(null,'',url);}fitNumber();}
 function revealMenu(){if(document.body.dataset.mode!=='display')return;byId('display-menu').hidden=false;clearTimeout(menuTimer);menuTimer=setTimeout(()=>{byId('display-menu').hidden=true;},5000);}
-function applySettings(){for(const key of ['volume','interval','color','size'])byId(key).value=settings[key];byId('custom-color').value=settings.customColor;player.volume=settings.volume;const palette=settings.color==='custom'?{fg:settings.customColor,bg:'#000000'}:PALETTES[settings.color];document.documentElement.style.setProperty('--display-color',palette.fg);document.documentElement.style.setProperty('--display-bg',palette.bg);for(const button of byId('palettes').children)button.setAttribute('aria-pressed',String(button.dataset.palette===settings.color));fitNumber();}
+function applySettings(){for(const key of ['volume','interval','color','size'])byId(key).value=settings[key];byId('custom-color').value=settings.customColor;voice.setVolume(settings.volume);const palette=settings.color==='custom'?{fg:settings.customColor,bg:'#000000'}:PALETTES[settings.color];document.documentElement.style.setProperty('--display-color',palette.fg);document.documentElement.style.setProperty('--display-bg',palette.bg);for(const button of byId('palettes').children)button.setAttribute('aria-pressed',String(button.dataset.palette===settings.color));fitNumber();}
 for(const [key,palette] of Object.entries(PALETTES)){const button=document.createElement('button');button.type='button';button.dataset.palette=key;button.className='palette';button.style.backgroundColor=palette.bg;button.style.color=palette.fg;const number=document.createElement('span');number.className='palette-number';number.textContent='38';const label=document.createElement('span');label.textContent=palette.label;button.append(number,label);button.addEventListener('click',()=>{settings.color=key;try{localStorage.setItem('tc06-settings-v2',JSON.stringify(settings));}catch{}applySettings();});byId('palettes').append(button);}
 for(const key of ['volume','interval','color','size'])byId(key).addEventListener('input',()=>{settings[key]=key==='color'?byId(key).value:Number(byId(key).value);try{localStorage.setItem('tc06-settings-v2',JSON.stringify(settings));}catch{}if(key==='interval')nextAnnouncement=Date.now()+settings.interval*1000;applySettings();});
 byId('custom-color').addEventListener('input',()=>{settings.customColor=byId('custom-color').value;settings.color='custom';try{localStorage.setItem('tc06-settings-v2',JSON.stringify(settings));}catch{}applySettings();});
@@ -75,8 +72,8 @@ byId('fullscreen').addEventListener('click',fullscreen);byId('display-fullscreen
 byId('display-mode').addEventListener('click',()=>{setMode('display');fullscreen();});byId('normal-mode').addEventListener('click',()=>setMode('normal'));
 document.addEventListener('pointerdown',revealMenu);document.addEventListener('keydown',event=>{if(event.key==='Escape')setMode('normal');else if(['Enter','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Tab'].includes(event.key))revealMenu();});window.addEventListener('resize',fitNumber);document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&document.body.dataset.mode==='display')setMode('normal');});
 byId('history-day').value=new Date(Date.now()+9*3600000).toISOString().slice(0,10);byId('download').addEventListener('click',()=>{location.href='/api/history?day='+encodeURIComponent(byId('history-day').value);});
-document.addEventListener('visibilitychange',()=>{if(document.hidden){player.pause();if('speechSynthesis'in window)speechSynthesis.cancel();}else refresh();});window.addEventListener('offline',()=>{networkOK=false;render();});window.addEventListener('online',refresh);
-player.addEventListener('error',()=>{if(enabled)byId('audio-status').textContent='음성 파일 재생을 확인해 주세요.';});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){voice.cancel();}else refresh();});window.addEventListener('offline',()=>{networkOK=false;render();});window.addEventListener('online',refresh);
 setInterval(()=>{if(!document.hidden)refresh();},60000);setInterval(()=>{render();if(enabled&&Date.now()>=nextAnnouncement){nextAnnouncement=Date.now()+settings.interval*1000;announce();}},1000);
-setMode(new URLSearchParams(location.search).get('mode')==='normal'?'normal':'display',false);applySettings();render();refresh();cacheFallback();
+setMode(new URLSearchParams(location.search).get('mode')==='normal'?'normal':'display',false);applySettings();render();refresh();voice.preload().catch(()=>{});
+fetch('/api/retention',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(data=>{if(data?.last_cleanup)byId('retention-status').textContent=`최근 30일 보관 (한국날짜 기준) · 매시 15분 자동 삭제 · 최근 정리 ${formatTime(data.last_cleanup.ran_at)}`;}).catch(()=>{});
 if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});

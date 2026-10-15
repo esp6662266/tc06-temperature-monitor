@@ -30,7 +30,7 @@ def run_gui(autostart=False):
     config_path = runtime / "config.json"
     config = json.loads(config_path.read_text("utf-8")) if config_path.exists() else {}
     root = tk.Tk()
-    root.title("TC-06 온도 수집기 0.2.0 · 현장 검증 전")
+    root.title("TC-06 온도 수집기 0.3.0 · 현장 검증 전")
     root.geometry("760x690")
     root.minsize(650, 630)
     pane = ttk.Frame(root, padding=18)
@@ -61,7 +61,7 @@ def run_gui(autostart=False):
     saved = tk.StringVar(value="로컬 저장: 없음")
     uploaded = tk.StringVar(value="서버 저장: 없음")
     detail = tk.StringVar(value="")
-    speech_status = tk.StringVar(value="음성 생성: 아직 미확인")
+    speech_status = tk.StringVar(value="음성: 웹 숫자 TTS 사용 · PC 음성 설치 불필요")
     ttk.Label(pane, textvariable=value, font=("Segoe UI", 36, "bold")).grid(row=7, column=0, columnspan=2, pady=12)
     for row, var in enumerate([status, saved, uploaded, detail], 8):
         ttk.Label(pane, textvariable=var, wraplength=700).grid(row=row, column=0, columnspan=2, sticky="w", pady=4)
@@ -112,13 +112,11 @@ def run_gui(autostart=False):
                 if "uploaded_at" in event:
                     uploaded.set("서버 저장 확인: " + event["uploaded_at"])
                     detail.set("전송 대기: " + str(event.get("pending", 0)))
-                for key in ["network_error", "speech_error", "error"]:
+                for key in ["network_error", "error"]:
                     if key in event:
                         detail.set(event[key])
-                if "speech_error" in event:
-                    speech_status.set("음성 생성: 실패 · 한국어 여성 음성과 PowerShell 정책 확인")
-                if event.get("speech_ok"):
-                    speech_status.set("음성 생성: 한국어 여성 WAV 생성 확인")
+                if event.get("retention_dropped"):
+                    detail.set("30일 보관 기간이 지난 재전송 기록을 정리했습니다.")
                 if "crop_png" in event:
                     image = Image.open(io.BytesIO(event["crop_png"]))
                     image.thumbnail((600, 80))

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { randomUUID, createHash } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { createAPI, updateLatest, validateRecord } from '../server/api.mjs';
 import { MemoryStore } from '../server/memory-store.mjs';
 
@@ -51,8 +51,8 @@ test('stale values and failed OCR are explicit; bad submissions are rejected',as
   assert.throws(()=>validateRecord(record(0,{value_c:1234.56})));
   assert.throws(()=>validateRecord(record(0,{source_clock:null})));
   assert.throws(()=>validateRecord(record(-60000)));
-  const response=await api(req('ingest',{method:'POST',upload:true,body:{record:record(),audio_base64:'not-a-wave'}}));
-  assert.equal(response.status,400);
+  const response=await api(req('ingest',{method:'POST',upload:true,body:{record:record(),audio_base64:'legacy-ignored'}}));
+  assert.equal(response.status,200);
 });
 test('store errors are not acknowledged; public reads ignore stale cookies',async()=>{
   const {api,cookie}=await fixture();
@@ -60,25 +60,29 @@ test('store errors are not acknowledged; public reads ignore stale cookies',asyn
   const bad=createAPI(()=>{throw Error('offline');});
   assert.equal((await bad(req('ingest',{method:'POST',upload:true,body:{record:record()}}))).status,503);
 });
-test('KST day history and WAV access are public with validated identifiers',async()=>{
-  const {api,cookie}=await fixture();
-  assert.equal((await api(req('audio?id=notice-stale'))).status,404);
-  assert.equal((await api(req('audio?id=../../secret',{cookie}))).status,400);
-  const row=record(0,{captured_at:'2026-01-01T16:00:00.000Z',recorded_at:'2026-01-01T16:00:00.000Z'});
-  await api(req('ingest',{method:'POST',upload:true,body:{record:row}}));
-  const response=await api(req('history?day=2026-01-02',{cookie}));
-  assert.ok((await response.text()).includes(row.id));
+test('KST history is public and dates outside 30-day retention are rejected',async()=>{
+  const {api}=await fixture();assert.equal((await api(req('audio?id=notice-stale'))).status,410);
+  const at=new Date();at.setUTCHours(16,0,0,0);at.setUTCDate(at.getUTCDate()-1);
+  const row=record(0,{captured_at:at.toISOString(),recorded_at:at.toISOString()});
+  await api(req('ingest',{method:'POST',body:{record:row}}));
+  const day=new Date(at.getTime()+9*3600000).toISOString().slice(0,10);
+  assert.ok((await(await api(req('history?day='+day))).text()).includes(row.id));
+  assert.equal((await api(req('history?day=2020-01-01'))).status,410);
+  assert.equal((await api(req('history?day=2026-02-31'))).status,400);
 });
-test('WAV content is reused and audio hashes must match uploaded bytes',async()=>{
-  const {store,api,cookie}=await fixture();
-  const wav=Buffer.alloc(100);wav.write('RIFF');wav.writeUInt32LE(92,4);wav.write('WAVE',8);
-  const digest=createHash('sha256').update(wav).digest('hex');
-  for(let i=0;i<2;i++) {
-    const body={record:record(),audio_hash:digest,...(i===0?{audio_base64:wav.toString('base64')}:{})};
-    assert.equal((await api(req('ingest',{method:'POST',upload:true,body}))).status,200);
-  }
-  assert.equal([...store.data.keys()].filter(k=>k.startsWith('audio/')).length,1);
-  assert.equal((await api(req('audio?id='+digest,{cookie}))).headers.get('Content-Type'),'audio/wav');
-  const wrong={record:record(),audio_hash:'a'.repeat(64),audio_base64:wav.toString('base64')};
-  assert.equal((await api(req('ingest',{method:'POST',upload:true,body:wrong}))).status,400);
+test('legacy audio submissions are ignored and only record text is stored',async()=>{
+  const {store,api}=await fixture();
+  assert.equal((await api(req('ingest',{method:'POST',body:{record:record(),audio_base64:'legacy-wave',audio_hash:'a'.repeat(64),notice_audio_base64:'legacy'}}))).status,200);
+  assert.equal([...store.data.keys()].filter(k=>k.startsWith('audio/')).length,0);
+  const latest=(await(await api(req('latest'))).json()).record;assert.equal('audio_id' in latest,false);assert.equal('has_audio' in latest,false);
+});
+test('expired offline retries are explicitly discarded without recreating deleted records',async()=>{
+  const {store,api}=await fixture();const row=record(40*86400000);
+  const response=await api(req('ingest',{method:'POST',body:{record:row}}));assert.equal(response.status,410);
+  const data=await response.json();assert.equal(data.discarded,'retention_expired');assert.equal(data.id,row.id);assert.equal(store.data.size,0);
+});
+test('retention policy is public and expired latest is hidden before physical cleanup',async()=>{
+  const {store,api}=await fixture();await store.setJSON('latest',record(40*86400000));
+  assert.equal((await(await api(req('latest'))).json()).record,null);
+  assert.equal((await(await api(req('retention'))).json()).retention_days,30);
 });

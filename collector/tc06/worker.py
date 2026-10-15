@@ -1,19 +1,16 @@
 from __future__ import annotations
 
-import base64
-import datetime as dt
 import json
-import hashlib
 import logging
 import threading
 import time
 import urllib.request
+import urllib.error
 from urllib.parse import urlparse
 from pathlib import Path
 from .capture import DeviceSource, WindowSource
 from .core import Outbox, make_record, utc_now
 from .ocr import Reader
-from .speech import NOTICE, speech_text, synthesize
 
 
 def validate_endpoint(base):
@@ -106,8 +103,6 @@ class Monitor:
 
     def _send(self):
         box = None
-        known_audio = set()
-        notice_sent = False
         try:
             box = Outbox(self.runtime / "history.sqlite3")
             while not self.stop_event.is_set():
@@ -118,19 +113,6 @@ class Monitor:
                     if self.stop_event.is_set():
                         break
                     body = {"record": record}
-                    age = (dt.datetime.now(dt.timezone.utc) - dt.datetime.fromisoformat(record["captured_at"])).total_seconds()
-                    if age <= 150:
-                        try:
-                            encoded = synthesize(speech_text(record), self.runtime / "audio")
-                            digest = hashlib.sha256(base64.b64decode(encoded)).hexdigest()
-                            body["audio_hash"] = digest
-                            if digest not in known_audio:
-                                body["audio_base64"] = encoded
-                            if not notice_sent:
-                                body["notice_audio_base64"] = synthesize(NOTICE, self.runtime / "audio")
-                            self.notify({"speech_ok": True})
-                        except Exception:
-                            self.notify({"speech_error": "음성 생성 실패: 한국어 여성 음성 설치·PowerShell 정책 확인"})
                     try:
                         request = urllib.request.Request(
                             self.base + "/api/ingest", data=json.dumps(body).encode(),
@@ -140,15 +122,22 @@ class Monitor:
                         if reply.get("id") != record["id"] or reply.get("saved") is not True:
                             raise RuntimeError("서버 저장 확인 응답 불일치")
                         box.ack(record["id"])
-                        if body.get("audio_hash"):
-                            known_audio.add(body["audio_hash"])
-                        if body.get("notice_audio_base64"):
-                            notice_sent = True
                         self.notify({"uploaded_at": utc_now(), "pending": box.count_pending()})
+                    except urllib.error.HTTPError as error:
+                        if error.code == 410:
+                            try:
+                                reply = json.load(error)
+                                if reply.get("discarded") == "retention_expired" and reply.get("id") == record["id"]:
+                                    box.ack(record["id"])
+                                    self.notify({"retention_dropped": True, "pending": box.count_pending()})
+                                    continue
+                            except (ValueError, OSError):
+                                pass
+                        self.notify({"network_error": "서버 전송 실패: PC에 보관 중, 자동 재시도", "pending": box.count_pending()})
+                        failed = True
+                        break
                     except Exception as error:
                         logging.warning("Upload failed (%s); record remains pending", type(error).__name__)
-                        known_audio.clear()
-                        notice_sent = False
                         self.notify({"network_error": "서버 전송 실패: PC에 보관 중, 자동 재시도", "pending": box.count_pending()})
                         failed = True
                         break

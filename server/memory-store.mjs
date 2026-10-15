@@ -25,7 +25,15 @@ export class MemoryStore {
     const entry = this.data.get(key);
     return entry ? { etag: entry.etag, metadata: {} } : null;
   }
-  async *list({ prefix }) {
-    yield { blobs: [...this.data.keys()].filter(key => key.startsWith(prefix)).map(key => ({ key })) };
+  async delete(key) { this.data.delete(key); }
+  async *list({ prefix = '', directories = false }) {
+    const keys = [...this.data.keys()].filter(key => key.startsWith(prefix));
+    const dirs = new Set(), blobs = [];
+    for (const key of keys) {
+      const remainder = key.slice(prefix.length);
+      if (directories && remainder.includes('/')) dirs.add(prefix + remainder.split('/')[0]);
+      else blobs.push({ key });
+    }
+    yield { blobs, directories: [...dirs] };
   }
 }

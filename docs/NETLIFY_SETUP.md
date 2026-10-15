@@ -1,60 +1,61 @@
-# Netlify 설정
+# Netlify 설정 · v0.3
 
-**2026-10-16 온도 전용 사이트 배포·공개 API 저장/조회 확인 완료.**
+운영: https://tc06-temperature-monitor.netlify.app/
+일반 화면: https://tc06-temperature-monitor.netlify.app/?mode=normal
 
-- 운영: https://tc06-temperature-monitor.netlify.app/
-- 일반 화면: https://tc06-temperature-monitor.netlify.app/?mode=normal
-- Site ID: `67ba3ef2-67cd-4fdb-afdb-bd303748108c`
-- 배포 ID: `6ad0eb1b6add2dfc26420d44`
-- 소스: https://github.com/esp6662266/tc06-temperature-monitor
+Site ID: `67ba3ef2-67cd-4fdb-afdb-bd303748108c`
+소스: https://github.com/esp6662266/tc06-temperature-monitor
 
-GitHub 자동 배포 연결은 아직 설정하지 않았다. 현재는 CLI 수동 배포다. 소스를 수정·푸시한 것만으로 운영 사이트가 바뀌지는 않는다. 배포 시 반드시 위 온도 전용 Site ID를 지정하고 이 저장소의 `netlify.toml`을 확인한다. 인증 정보는 저장소에 넣지 않는다.
+GitHub 자동 배포 연결은 설정하지 않았다. 현재 Netlify CLI 수동 배포다. 소스 푸시만으로 운영 사이트가 바뀌지는 않는다. 반드시 온도 전용 Site ID와 이 저장소의 `netlify.toml`을 사용한다. 기존 GME/SEJIN 사이트를 수정하지 않는다.
 
 ```sh
 npm ci
 netlify deploy --prod --site 67ba3ef2-67cd-4fdb-afdb-bd303748108c --dir web --functions netlify/functions
 ```
 
-다른 계정에 새로 만들 때:
+## 구성
 
-1. Netlify에서 이 GitHub 저장소를 연결해 **온도 전용 프로젝트**를 만든다. 저장소의 `netlify.toml`을 사용한다.
-2. 배포할 브랜치 `main`, 게시 폴더 `web`, Functions 폴더 `netlify/functions`. Node.js 22. 별도 프런트엔드 빌드 명령은 필요하지 않다. 저장소의 Node 의존성은 설치해야 한다.
-3. 조회·업로드 키와 로그인 설정은 필요 없다. 사용자 요청에 따라 수신·조회 API 모두 공개다.
-4. 배포한 사이트 루트 주소를 Windows PC GUI에서 확인하고 영상 대상을 설정한다. 이후 프로그램을 실행하면 자동 수집한다.
-5. 첫 정상 판독 기록을 전송한 후 서버 응답의 `saved: true`, 홈페이지의 판독·수신 시각, 새로고침 후 유지 상태를 대조한다.
-6. TV에서 사이트 주소를 열면 숫자 전용 화면이 열린다. 최초/단절/판독 실패 때는 기본값 38도다. 화면을 눌러 메뉴를 열거나 일반 화면 주소를 사용한다. ‘음성 안내 시작’을 누르고 1분 간격으로 **최신값에 해당하는 음성**을 재생하는지 확인한다. 음성을 듣고 숫자·소수점·단위를 원본과 대조한다.
+- 게시 폴더 `web`, Functions 폴더 `netlify/functions`, esbuild 번들링.
+- 조회·수신 키와 로그인은 없다. Netlify 관리 계정 자격증명은 저장소에 넣지 않는다.
+- 빌드 환경 Node.js 설정은 22이고 이번 실제 Functions 런타임 메타데이터는 Node.js 24다.
+- Windows 수집기에는 사이트 루트 주소가 기본 입력되어 있다. 영상 대상 설정 후 자동 수집한다.
+- TV에서 페이지를 열고 ‘음성 시작’을 한 번 눌러 소리 재생을 허용한다. 전체 화면에서는 온도만 보이고 조작 시 메뉴가 나온다.
 
-## 저장 구조
+## 저장 구조·30일 정책
 
 사이트별 Blobs 저장소 `tc06-monitor-v1`, strong consistency를 사용한다.
 
-- `records/한국날짜/UUID`: 불변 기록. 재전송 id가 같으면 새 행을 만들지 않는다.
-- `latest`: 최신 기록. ETag compare-and-swap으로 동시 요청과 과거 재전송을 처리한다.
-- `audio/SHA256`: 한국어 여성 WAV. 동일 내용은 재사용한다.
-- `audio/notice-stale`: v0.1 호환용 갱신 끊김 안내. v0.2 웹의 기본값 안내는 정적 `/audio/fallback-38.mp3`를 사용한다.
+- `records/한국날짜/UUID`: 불변 온도 텍스트 기록.
+- `latest`: 최신 기록. 동시 요청·과거 재전송은 ETag 조건부 쓰기로 보호한다.
+- `maintenance/retention`: 최근 정리 실행 시각·삭제 수·한도 도달 여부.
+- 이전 `audio/SHA256`, `audio/notice-stale`는 정리 함수가 삭제한다. 새 음성 필드는 저장하지 않는다.
 
-PC 로컬 SQLite와 서버 기록을 대조하기 전까지 업로드 완료로 간주하지 않는다. 운영 기록은 자동 삭제하지 않는다. 보관 기간·백업·사용량 경고는 계정 요금제에 맞춰 설정한다. 1분 기록이면 PC 한 대에서 하루 약 1,440건이며 실패 상태도 행으로 남는다. 웹은 보이는 동안 60초마다 조회하고 음성 안내 시에도 최신 상태를 조회한다.
+서버는 한국 날짜 기준 오늘 포함 최근 30개 날짜를 남긴다. `cleanup.mjs`의 `config.schedule = "15 * * * *"`는 UTC 기준 매시 15분이며 한국시간도 매시 15분이다. 운영 배포에서 실행한다. 1회 최대 2,000개·약 22초까지만 지우고 남으면 다음 실행에서 계속한다. 최근 날짜와 알려지지 않은 키는 보존한다. 만료 최신값은 ETag 조건부 null 처리해 동시에 들어온 새 값을 보존한다.
+
+만료 기록 조회와 재전송은 물리 삭제 전에도 HTTP 410으로 거부한다. 새 수집기는 id/사유를 확인해 해당 재전송 대기만 해제한다. PC SQLite 이력은 서버 정책과 별도로 보존된다. 필요한 CSV는 만료 전에 다운로드한다.
+
+Netlify Functions 화면에서 `cleanup`의 Scheduled 표시와 다음 실행 시각을 확인한다. `/api/retention`에서 최근 정리 결과를 확인한다. 예약 함수는 공개 URL로 직접 실행할 수 없다. 수집기가 꺼져도 Netlify 예약 정리는 계속된다.
+
+## 웹 숫자 TTS
+
+고정 한국어 여성 숫자·단위 MP3 17개(합계 65,085바이트)가 웹 배포 자산이다. Web Audio로 현재 숫자를 조합하며 온도별 파일을 만들지 않는다. 운영체제 TTS 설치·Windows 음성 생성·외부 TTS API는 사용하지 않는다. 조각을 이어 붙여 억양이 끊길 수 있으므로 실제 TV에서 숫자·소수점·단위와 명료도를 확인한다.
+
+서비스 워커는 화면·스크립트·스타일·고정 숫자 묶음을 캐시한다. `/api/*`는 캐시하지 않는다. 온라인으로 한 번 정상 방문해 캐시가 준비된 브라우저에서 오프라인 기본값 38도 안내를 사용할 수 있다. 캐시 삭제·미지원 브라우저의 오프라인 첫 접속은 보장하지 않는다.
 
 ## 운영 전 확인
 
-- 함수·저장소 사용량과 요금제 한도 확인. 무료 무제한 보장 없음.
-- 배포 미리보기와 운영이 같은 사이트 저장소를 공유할 수 있으므로 실제 운영 사이트를 테스트 데이터로 채우지 않는다. 로컬 검증은 `server/dev.mjs`의 임시 저장소를 사용한다.
-- 조회·업로드 API는 모두 공개·무인증이며 주소를 아는 누구나 사용할 수 있다. 로그인 쿠키나 세션 만료는 없다.
-- 수신 API는 PC의 실제 캡처·음성 생성의 진위를 독립적으로 증명하지 않는다. 제출 형식과 최신값 순서만 검사한다.
-- 이 버전은 한 사이트·한 설비·한 수집기용이다. 다중 PC/설비는 최신값 키 분리와 운영 정책을 추가한 뒤 사용한다.
+- 실제 Windows 수집기의 SQLite와 서버 id/시각을 대조해 1분 저장·단절 복구를 확인한다.
+- 함수·저장소·전송 사용량은 Netlify 요금제에 따른다. 무료 무제한을 보장하지 않는다.
+- 운영과 Deploy Preview가 사이트 저장소를 공유할 수 있다. 운영에 정상 온도 시험 데이터를 채우지 않는다.
+- 이 버전은 한 사이트·한 설비·한 수집 PC용이다.
+- 공개 수신 API는 원본 캡처의 진위를 독립적으로 증명하지 않는다.
+
+## 로컬 미리보기
+
+Node.js 22 이상에서 `npm ci`, `npm run dev` 후 `http://127.0.0.1:8766`을 연다. 임시 메모리 저장소이며 종료 시 지워진다. Netlify 예약 함수의 자동 실행은 로컬 개발 서버에 포함되지 않는다. 정리 로직은 `npm test`로 검증한다.
 
 공식 문서:
 
-- https://docs.netlify.com/build/functions/overview/
-- https://docs.netlify.com/build/functions/environment-variables/
+- https://docs.netlify.com/build/functions/scheduled-functions/
 - https://docs.netlify.com/build/data-and-storage/netlify-blobs/
-
-## 로컬 웹 미리보기
-
-Node.js 22 이상에서 `npm ci` 후 `npm run dev`를 실행한다. 키와 로그인은 없다. `http://127.0.0.1:8766`은 개발 PC에서만 열리며 데이터는 서버 종료 시 사라진다. 이 개발 서버를 현장 운영 서버로 쓰지 않는다.
-
-## 오프라인 동작
-
-서비스 워커가 화면·스크립트·스타일·고정 38도 MP3를 캐시한다. `/api/*`는 캐시하지 않는다. 페이지 방문 후 캐시가 준비되어야 오프라인 재접속이 가능하다. 온도 38은 화면/음성 기본값이며 Blobs 측정 기록을 채우지 않는다. 일반 설정은 localStorage에 기기별 저장한다.
-
-일반 화면의 **전체 화면** 버튼도 숫자 전용 모드로 전환한 후 전체 화면을 요청한다. 온도 이외의 제목·상태·단위·설정은 숨겨지고, 화면/리모컨 조작 때만 메뉴를 잠깐 표시한다.
+- https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API

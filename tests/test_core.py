@@ -50,3 +50,28 @@ def test_upload_endpoint_rejects_unencrypted_nonlocal_hosts_and_embedded_secrets
     for url in ["http://example.com", "https://user:password@example.com", "https://example.com/?token=secret"]:
         with pytest.raises(ValueError):
             validate_endpoint(url)
+
+
+def test_text_only_uploader_acknowledges_expired_record_without_retry(tmp_path, monkeypatch):
+    import io
+    import urllib.error
+    from tc06.worker import Monitor
+    box = Outbox(tmp_path / "history.sqlite3")
+    row = make_record({"status": "ocr_failed"}, "test-pc")
+    box.add(row)
+    box.close()
+    events = []
+    def notify(event):
+        events.append(event)
+        monitor.stop_event.set()
+    monitor = Monitor({"server_url": "https://example.netlify.app"}, tmp_path, notify)
+    def expired_response(request, timeout):
+        body = json.loads(request.data)
+        assert list(body) == ["record"]
+        raise urllib.error.HTTPError(request.full_url, 410, "Expired", {}, io.BytesIO(json.dumps({"discarded": "retention_expired", "id": row["id"]}).encode()))
+    monkeypatch.setattr("urllib.request.urlopen", expired_response)
+    monitor._send()
+    box = Outbox(tmp_path / "history.sqlite3")
+    assert box.count_pending() == 0
+    assert events[0]["retention_dropped"] is True
+    box.close()

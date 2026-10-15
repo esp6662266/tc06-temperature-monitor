@@ -7,7 +7,7 @@ if (-not (Test-Path $python)) { throw 'Run scripts\Setup-Windows.ps1 first.' }
 if ($LASTEXITCODE -ne 0) { throw 'Build dependency installation failed.' }
 & $python -m pytest -q
 if ($LASTEXITCODE -ne 0) { throw 'Python checks failed.' }
-& $python -m PyInstaller --noconfirm --clean --onedir --windowed --name TC06Monitor --paths collector --add-data 'collector\speech.ps1;.' collector\app.py
+& $python -m PyInstaller --noconfirm --clean --onedir --windowed --name TC06Monitor --paths collector collector\app.py
 if ($LASTEXITCODE -ne 0) { throw 'Windows build failed.' }
 Get-FileHash dist\TC06Monitor\TC06Monitor.exe -Algorithm SHA256
-Write-Host 'Copy the entire dist\TC06Monitor folder. Tesseract and the Korean female voice remain separate prerequisites.'
+Write-Host 'Copy the entire dist\TC06Monitor folder. Tesseract remains a separate prerequisite. Speech is composed in the web browser.'

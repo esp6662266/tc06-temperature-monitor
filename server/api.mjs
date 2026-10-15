@@ -1,11 +1,10 @@
-import { createHash } from 'node:crypto';
+import { RETENTION_DAYS, dayKST, oldestDay, expired } from './retention.mjs';
 
 const STATUSES = new Set(['ok', 'anchor_missing', 'ambiguous_anchor', 'occluded', 'ocr_failed',
   'value_suspect', 'low_confidence', 'freshness_unverified', 'stale_source', 'source_error', 'window_missing']);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const AGE_MS = 150_000;
 const MAX_BODY = 2_000_000;
-const dayKST = iso => new Date(Date.parse(iso) + 9 * 3600_000).toISOString().slice(0, 10);
 const recordKey = record => `records/${dayKST(record.captured_at)}/${record.id}`;
 const rank = record => `${record.captured_at}|${record.recorded_at}|${record.id}`;
 
@@ -51,18 +50,11 @@ export function validateRecord(raw, now = Date.now()) {
     source_clock: typeof raw.source_clock === 'string' ? raw.source_clock.slice(0, 16) : null };
 }
 
-function wavBytes(base64) {
-  if (typeof base64 !== 'string' || !/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) throw new Error('Invalid audio');
-  const bytes = Buffer.from(base64, 'base64');
-  if (bytes.length < 44 || bytes.length > 700_000 || bytes.toString('ascii', 0, 4) !== 'RIFF' || bytes.toString('ascii', 8, 12) !== 'WAVE') throw new Error('Expected WAV audio');
-  return bytes;
-}
-
 export async function updateLatest(store, record) {
   // Conditional writes prevent old retries and concurrent requests from replacing newer state.
   for (let attempt = 0; attempt < 8; attempt++) {
     const previous = await store.getWithMetadata('latest', { type: 'json', consistency: 'strong' });
-    if (previous && rank(previous.data) >= rank(record)) return;
+    if (previous?.data && rank(previous.data) >= rank(record)) return;
     const condition = previous ? { onlyIfMatch: previous.etag } : { onlyIfNew: true };
     const outcome = await store.setJSON('latest', record, condition);
     if (outcome.modified) return;
@@ -77,23 +69,16 @@ export function createAPI(getStore) {
     const method = request.method;
     if (action === 'ingest') {
       if (method !== 'POST') return json({ error: 'POST required' }, 405);
-      let body, record, audio, notice;
+      let body, record;
       try {
         body = await bodyJSON(request);
         record = validateRecord(body.record);
-        if (body.audio_base64) audio = wavBytes(body.audio_base64);
-        if (body.notice_audio_base64) notice = wavBytes(body.notice_audio_base64);
-        if (body.audio_hash && !/^[a-f0-9]{64}$/.test(body.audio_hash)) throw new Error('Invalid audio hash');
-        if (audio && body.audio_hash && createHash('sha256').update(audio).digest('hex') !== body.audio_hash) throw new Error('Audio hash mismatch');
+        if (expired(record)) return json({ error: '30일 보관 기간이 지난 기록입니다', id: record.id, discarded: 'retention_expired' }, 410);
       } catch (error) { return json({ error: error.message }, 400); }
       try {
         const store = getStore();
-        const audioId = audio ? createHash('sha256').update(audio).digest('hex') : body.audio_hash || null;
-        const audioKey = audioId ? `audio/${audioId}` : null;
-        if (audio) await store.set(audioKey, audio, { onlyIfNew: true });
-        else if (audioId && !await store.getMetadata(audioKey, { consistency: 'strong' })) throw new Error('Audio must be reuploaded');
-        if (notice) await store.set('audio/notice-stale', notice, { onlyIfNew: true });
-        const stored = { ...record, received_at: new Date().toISOString(), has_audio: Boolean(audioId), audio_id: audioId };
+        // Old collectors may send legacy audio fields; discard them without storage.
+        const stored = { ...record, received_at: new Date().toISOString() };
         const key = recordKey(record);
         await store.setJSON(key, stored, { onlyIfNew: true });
         // Use canonical first-write content on retries; immutable record history.
@@ -106,21 +91,19 @@ export function createAPI(getStore) {
     try {
       const store = getStore();
       if (action === 'latest') {
-        const record = await store.get('latest', { type: 'json', consistency: 'strong' });
+        const stored = await store.get('latest', { type: 'json', consistency: 'strong' });
+        const record = stored && !expired(stored) ? stored : null;
         const ageMs = record ? Date.now() - Date.parse(record.captured_at) : null;
-        return json({ record, server_now: new Date().toISOString(), max_age_ms: AGE_MS,
+        return json({ retention_days: RETENTION_DAYS, oldest_day: oldestDay(), record, server_now: new Date().toISOString(), max_age_ms: AGE_MS,
           fresh: Boolean(record && ageMs >= -30_000 && ageMs <= AGE_MS) });
       }
-      if (action === 'audio') {
-        const id = url.searchParams.get('id');
-        if (id !== 'notice-stale' && !/^[a-f0-9]{64}$/.test(id || '')) return json({ error: 'Invalid audio id' }, 400);
-        const data = await store.get(`audio/${id}`, { type: 'arrayBuffer', consistency: 'strong' });
-        if (!data) return json({ error: '음성 파일 없음' }, 404);
-        return new Response(data, { headers: { 'Content-Type': 'audio/wav', 'Cache-Control': 'public, max-age=3600', 'X-Content-Type-Options': 'nosniff' } });
-      }
+      if (action === 'audio') return json({ error: '웹 숫자 TTS로 전환되어 서버 음성 저장을 종료했습니다' }, 410);
+      if (action === 'retention') return json({ retention_days: RETENTION_DAYS, oldest_day: oldestDay(), timezone: 'Asia/Seoul',
+        cleanup_schedule: '매시 15분', last_cleanup: await store.get('maintenance/retention', { type: 'json' }) });
       if (action === 'history') {
         const day = url.searchParams.get('day') || dayKST(new Date().toISOString());
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !Number.isFinite(Date.parse(day))) return json({ error: 'Invalid date' }, 400);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !Number.isFinite(Date.parse(day)) || new Date(day).toISOString().slice(0,10) !== day) return json({ error: 'Invalid date' }, 400);
+        if (day < oldestDay()) return json({ error: '30일 보관 기간이 지난 날짜입니다', oldest_day: oldestDay() }, 410);
         const keys = [];
         for await (const page of store.list({ prefix: `records/${day}/`, paginate: true })) {
           keys.push(...page.blobs.map(blob => blob.key));

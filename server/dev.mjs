@@ -8,7 +8,9 @@ import { MemoryStore } from './memory-store.mjs';
 const store = new MemoryStore();
 const api = createAPI(() => store);
 const base = fileURLToPath(new URL('../web/', import.meta.url));
-const allowed = new Map([['/', ['index.html', 'text/html']], ['/app.js', ['app.js', 'text/javascript']], ['/style.css', ['style.css', 'text/css']], ['/index.html', ['index.html', 'text/html']], ['/sw.js', ['sw.js', 'text/javascript']], ['/audio/fallback-38.mp3', ['audio/fallback-38.mp3', 'audio/mpeg']]]);
+const allowed = new Map([['/', ['index.html', 'text/html']], ['/app.js', ['app.js', 'text/javascript']], ['/style.css', ['style.css', 'text/css']], ['/index.html', ['index.html', 'text/html']], ['/sw.js', ['sw.js', 'text/javascript']], ['/voice.js', ['voice.js', 'text/javascript']], ['/voice/manifest.json', ['voice/manifest.json', 'application/json']]]);
+const manifest=JSON.parse(await readFile(path.join(base,'voice/manifest.json'),'utf8'));
+for(const key of Object.keys(manifest.words))allowed.set(`/voice/${key}.mp3`,[`voice/${key}.mp3`,'audio/mpeg']);
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://127.0.0.1');

@@ -141,3 +141,43 @@ test('held numeric display keeps both number and age within TV and narrow screen
    await expect.poll(async()=>{const box=await page.locator('#temperature').boundingBox();return box.x>=0&&box.x+box.width<=size.width;}).toBe(true);const value=await page.locator('#temperature').boundingBox(),label=await page.locator('#display-held').boundingBox();expect(value.x).toBeGreaterThanOrEqual(0);expect(value.y).toBeGreaterThanOrEqual(0);expect(value.x+value.width).toBeLessThanOrEqual(size.width);expect(value.y+value.height).toBeLessThanOrEqual(label.y);expect(label.y+label.height).toBeLessThanOrEqual(size.height);
  }
 });
+
+// Synthetic forecast fixtures. No requests write these values to production.
+function forecastSample(now=Date.now(),age=60000){
+ const base=new Date(now-age).toISOString(),body=sample({id:'failed-forecast',status:'ocr_failed',value_c:null,captured_at:new Date(now-1000).toISOString()});
+ body.server_now=new Date(now).toISOString();body.last_good=sample({id:'forecast-basis',value_c:600,captured_at:base,received_at:base}).record;
+ body.estimate={estimated:true,value_c:605,estimated_at:new Date(now).toISOString(),based_on_at:base,based_on_value_c:600,last_normal_id:'forecast-basis',expires_at:new Date(now-age+120000).toISOString(),sample_count:3,slope_c_per_minute:5};return body;
+}
+test('short forecasts are explicitly labelled in normal, numeric and graph screens',async({page})=>{
+ await page.route('**/api/latest',r=>r.fulfill({json:forecastSample()}));await page.route('**/api/trend**',r=>r.fulfill({json:trendSample(1,true)}));
+ await page.goto('/?mode=normal');await expect(page.locator('#temperature')).toHaveText('≈605.0');await expect(page.locator('#quality')).toContainText('추정값');await expect(page.locator('#status')).toContainText('최대 2분');
+ await page.locator('#display-mode').click();await expect(page.locator('#display-held')).toBeVisible();await expect(page.locator('#display-held')).toContainText('추정값 · 마지막 실측');await page.keyboard.press('Enter');await page.locator('#display-to-graph').click();await expect(page.locator('#graph-temperature')).toHaveText('≈605.0');await expect(page.locator('#graph-reading-label')).toContainText('추정 온도');
+});
+test('forecasts expire at two minutes without waiting for another server response',async({page})=>{
+ const now=Date.now(),body=forecastSample(now,90000);await page.clock.install({time:now});await page.route('**/api/latest',r=>r.fulfill({json:body}));await page.goto('/?mode=display');await expect(page.locator('#temperature')).toHaveText('≈605.0');await page.clock.fastForward(31000);await expect(page.locator('#temperature')).toHaveText('600.0');await expect(page.locator('#display-held')).toContainText('마지막 정상값');
+});
+test('API failure immediately drops forecasts and reload keeps only the real last normal',async({page})=>{
+ let offline=false;await page.route('**/api/latest',r=>offline?r.abort():r.fulfill({json:forecastSample()}));await page.goto('/?mode=normal');await expect(page.locator('#temperature')).toHaveText('≈605.0');
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('tc06-last-good-v1')).value_c)).toBe(600);offline=true;await page.evaluate(()=>refresh());await expect(page.locator('#temperature')).toHaveText('600.0');await page.reload();await expect(page.locator('#temperature')).toHaveText('600.0');await expect(page.locator('#quality')).toContainText('마지막 정상값');
+});
+test('forecasts never use the current-temperature voice and normal readings resume it',async({page})=>{
+ let body=forecastSample();await page.route('**/api/latest',r=>r.fulfill({json:body}));await page.goto('/?mode=normal');await expect(page.locator('#temperature')).toHaveText('≈605.0');
+ await page.evaluate(()=>{window.syntheticVoiceCalls=0;voice.say=async()=>{window.syntheticVoiceCalls++;return true;};});await page.locator('#speech-start').click();await expect(page.locator('#audio-status')).toContainText('음성 안내 대기');expect(await page.evaluate(()=>window.syntheticVoiceCalls)).toBe(0);
+ body=sample({id:'recovered-forecast',value_c:606});await page.evaluate(()=>announce());await expect(page.locator('#temperature')).toHaveText('606.0');expect(await page.evaluate(()=>window.syntheticVoiceCalls)).toBe(1);await expect(page.locator('body')).toHaveAttribute('data-state','good');
+});
+test('forecast graph uses dashed overlays and excludes estimates from candles and measured extrema',async({page})=>{
+ const data=trendSample();const last=data.bars.at(-1);data.bars[data.bars.length-1]={...last,open:null,high:null,low:null,close:null,count:0,invalid_count:1};data.samples=59;data.invalid_samples=1;
+ data.estimates=[{estimated:true,value_c:905,based_on_value_c:600,based_on_at:data.bars.at(-2).time,estimated_at:last.time}];
+ await page.route('**/api/latest',r=>r.fulfill({json:forecastSample()}));await page.route('**/api/trend**',r=>r.fulfill({json:data}));await page.goto('/?mode=graph');await expect(page.locator('.candle')).toHaveCount(59);await expect(page.locator('.chart-estimate')).toHaveCount(1);await expect(page.locator('.estimate-point')).toHaveCount(1);await expect(page.locator('#graph-high')).toHaveText(data.high.toFixed(1)+' ℃');
+ expect(await page.locator('.chart-estimate').evaluate(el=>getComputedStyle(el).strokeDasharray)).not.toBe('none');await page.locator('#trend-chart').focus();await page.locator('#trend-chart').press('End');await expect(page.locator('#graph-detail')).toContainText('추정 약 905.0');await expect(page.locator('#graph-detail')).toContainText('정상 통계 제외');
+ const ticks=await page.locator('.chart-grid text').allTextContents();expect(Math.max(...ticks.map(Number).filter(Number.isFinite))).toBeGreaterThanOrEqual(905);
+});
+test('estimated thousands and their disclosure fit both desktop and narrow numeric displays',async({page})=>{
+ const body=forecastSample();body.estimate.value_c=1004.9;await page.route('**/api/latest',r=>r.fulfill({json:body}));await page.goto('/?mode=display');
+ for(const size of [{width:1920,height:1080},{width:390,height:844}]){await page.setViewportSize(size);await expect(page.locator('#temperature')).toHaveText('≈1004.9');await expect.poll(async()=>{const a=await page.locator('#temperature').boundingBox(),b=await page.locator('#display-held').boundingBox();return a.x>=0&&a.x+a.width<=size.width&&a.y>=0&&a.y+a.height<=b.y&&b.y+b.height<=size.height;}).toBe(true);}
+});
+test('a forecast-only window remains visible while measured extrema stay empty',async({page})=>{
+ const data=trendSample(1,true),at=data.bars[0].time,basis=new Date(Date.parse(at)-60000).toISOString();data.estimates=[{estimated:true,value_c:605,based_on_value_c:600,based_on_at:basis,estimated_at:at}];
+ await page.route('**/api/latest',r=>r.fulfill({json:forecastSample()}));await page.route('**/api/trend**',r=>r.fulfill({json:data}));await page.goto('/?mode=graph');await expect(page.locator('#graph-empty')).toBeHidden();await expect(page.locator('.chart-estimate')).toHaveCount(1);await expect(page.locator('.candle')).toHaveCount(0);await expect(page.locator('#graph-low')).toHaveText('—');await expect(page.locator('#graph-high')).toHaveText('—');
+ const coordinates=await page.locator('.estimate-point').evaluate(el=>({y:Number(el.getAttribute('cy')),height:el.ownerSVGElement.viewBox.baseVal.height}));expect(coordinates.y).toBeGreaterThanOrEqual(30);expect(coordinates.y).toBeLessThan(coordinates.height-44);
+});

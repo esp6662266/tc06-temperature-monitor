@@ -1,4 +1,5 @@
 import { updateTrend, getTrend, readDay } from './trend.mjs';
+import { estimateAt, ESTIMATE_STATUSES, MAX_ESTIMATE_MS } from './estimate.mjs';
 import { RETENTION_DAYS, dayKST, oldestDay, expired } from './retention.mjs';
 
 const STATUSES = new Set(['ok', 'anchor_missing', 'ambiguous_anchor', 'occluded', 'ocr_failed',
@@ -98,6 +99,14 @@ export async function lastGood(store, current, now = Date.now()) {
   return normal(stored, now) ? stored : null;
 }
 
+export async function currentEstimate(store, current, last, now=Date.now()) {
+  if (!current || !last || !ESTIMATE_STATUSES.has(current.status) || current.device_id!==last.device_id ||
+      Date.parse(current.captured_at)<=Date.parse(last.captured_at) || now-Date.parse(last.captured_at)>MAX_ESTIMATE_MS) return null;
+  const days=[...new Set([dayKST(Math.max(now-6*60000,Date.parse(oldestDay(now)+'T00:00:00+09:00'))),dayKST(now)])];
+  const indexes=await Promise.all(days.map(day=>readDay(store,day)));
+  return estimateAt(indexes.flatMap(index=>Object.entries(index.rows)),now,current.device_id,last.id);
+}
+
 export function createAPI(getStore) {
   return async function handle(request) {
     const url = new URL(request.url);
@@ -133,7 +142,9 @@ export function createAPI(getStore) {
         const record = stored && !expired(stored) ? stored : null;
         const ageMs = record ? Date.now() - Date.parse(record.captured_at) : null;
         const last_good = await lastGood(store, record);
-        return json({ retention_days: RETENTION_DAYS, oldest_day: oldestDay(), record, last_good, server_now: new Date().toISOString(), max_age_ms: AGE_MS,
+        let estimate=null;try{estimate=await currentEstimate(store,record,last_good);}catch{/* Optional forecast cannot hide real records on failure. */}
+        if(estimate && Date.parse(estimate.expires_at)<Date.now())estimate=null;
+        return json({ retention_days: RETENTION_DAYS, oldest_day: oldestDay(), record, last_good, estimate, server_now: new Date().toISOString(), max_age_ms: AGE_MS,
           fresh: Boolean(record && ageMs >= -30_000 && ageMs <= AGE_MS) });
       }
       if (action === 'audio') return json({ error: '웹 숫자 TTS로 전환되어 서버 음성 저장을 종료했습니다' }, 410);

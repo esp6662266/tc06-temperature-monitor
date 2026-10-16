@@ -1,8 +1,9 @@
+import { estimateFailures } from './estimate.mjs';
 import { dayKST, oldestDay } from './retention.mjs';
 const DAY = 86400_000;
 const MAX_ROWS = 3000;
 const summaryKey = day => `trend/${day}`;
-const tuple = row => [Date.parse(row.captured_at), row.status === 'ok' ? row.value_c : null, row.status, Date.parse(row.recorded_at)];
+const tuple = row => [Date.parse(row.captured_at), row.status === 'ok' ? row.value_c : null, row.status, Date.parse(row.recorded_at), row.device_id];
 export function validDay(day) {
   return /^\d{4}-\d{2}-\d{2}$/.test(day || '') && Number.isFinite(Date.parse(day)) && new Date(day).toISOString().slice(0,10) === day;
 }
@@ -15,7 +16,7 @@ export async function mergeTrend(store, day, records, complete = false) {
     const data = previous?.data || { version:1, day, complete:false, rows:{} };
     const rows = { ...data.rows };
     for (const record of records) rows[record.id] = tuple(record);
-    const next = { version:1, day, complete:data.complete || complete, rows };
+    const next = { version:2, day, complete:(data.version===2 && data.complete) || complete, rows };
     const result = await store.setJSON(summaryKey(day), next, previous ? {onlyIfMatch:previous.etag} : {onlyIfNew:true});
     if (result.modified) return next;
   }
@@ -26,7 +27,7 @@ export async function updateTrend(store, record) {
 }
 export async function readDay(store, day) {
   const indexed = await store.get(summaryKey(day), {type:'json',consistency:'strong'});
-  if (indexed?.complete) return indexed;
+  if (indexed?.complete && indexed.version===2) return indexed;
   // Upgrade old history once, and merge with uploads that arrived during scanning.
   const keys = [];
   for await (const page of store.list({prefix:`records/${day}/`,paginate:true})) {
@@ -61,12 +62,15 @@ export function aggregateTrend(entries,{start,end,period},now=Date.now()) {
 }
 export async function getTrend(store,options,now=Date.now()) {
   const window=trendWindow(options,now);if(window.error)return window;
-  const days=[dayKST(window.start)];const lastDay=dayKST(window.end-1);if(lastDay!==days[0])days.push(lastDay);
+  const contextStart=Math.max(window.start-6*60000,Date.parse(oldestDay(now)+'T00:00:00+09:00'));
+  const days=[];for(let at=Date.parse(dayKST(contextStart)+'T00:00:00+09:00');at<window.end;at+=DAY)days.push(dayKST(at));
   const summaries=await Promise.all(days.map(day=>readDay(store,day)));
-  const bars=aggregateTrend(summaries.flatMap(summary=>Object.entries(summary.rows)),window,now);
+  const entries=summaries.flatMap(summary=>Object.entries(summary.rows));
+  const bars=aggregateTrend(entries,window,now);
+  const estimates=estimateFailures(entries,window);
   const valid=bars.filter(bar=>bar.count);
   return {day:options.day,minutes:options.minutes,span:options.span,timezone:'Asia/Seoul',server_now:new Date(now).toISOString(),
-    start:new Date(window.start).toISOString(),end:new Date(window.end).toISOString(),oldest_day:oldestDay(now),bars,
+    start:new Date(window.start).toISOString(),end:new Date(window.end).toISOString(),oldest_day:oldestDay(now),bars,estimates,
     samples:valid.reduce((count,bar)=>count+bar.count,0),invalid_samples:bars.reduce((count,bar)=>count+bar.invalid_count,0),
     low:valid.length?Math.min(...valid.map(bar=>bar.low)):null,high:valid.length?Math.max(...valid.map(bar=>bar.high)):null};
 }

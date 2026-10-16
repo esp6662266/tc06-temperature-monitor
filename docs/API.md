@@ -5,7 +5,7 @@
 | 경로 | 역할 |
 |---|---|
 | POST /api/ingest | `{record}` 온도 텍스트 저장 |
-| GET /api/latest | 최신 record·마지막 정상 last_good·서버 시각·fresh·30일 보관 경계 |
+| GET /api/latest | 최신 record·마지막 정상 last_good·별도 estimate·서버 시각·fresh·30일 보관 경계 |
 | GET /api/history?day=YYYY-MM-DD | 해당 한국 날짜 CSV. 만료 날짜는 410 |
 | GET /api/trend?day=YYYY-MM-DD&minutes=1&span=360 | 온도 봉 JSON |
 | GET /api/retention | 보관 정책·최근 자동 정리 결과 |
@@ -44,6 +44,10 @@
 
 음성은 `/voice/*.mp3` 17개를 `/voice.js`가 Web Audio로 조합한다. 온도별 파일·OS TTS·외부 TTS 서비스는 사용하지 않는다. 0~9999.9와 음수를 읽고 소수 부분이 0이면 정수로 발음한다.
 
+## 표시용 추정 (v0.5.2)
+
+`GET /api/latest`의 `estimate`는 안정적인 같은 PC의 정상 기록 3~5개로 최대 120초 동안 계산한 별도 추정값 또는 null이다. 원본 `record`와 `last_good`는 그대로다. `GET /api/trend`의 `estimates`는 실패 시각까지의 근거만 사용한 별도 추정 배열이다. 실측 봉·통계·CSV는 유지한다. 조건, 응답 필드, 만료, 음성 정책은 [ESTIMATION.md](ESTIMATION.md)를 따른다.
+
 ## 30일 자동 삭제
 
 한국 날짜 기준 오늘 포함 최근 30개 날짜만 보관한다. 10월 16일이면 9월 17일부터 보관한다. `cleanup` Scheduled Function은 매시 15분에 지난 날짜의 `records/날짜/UUID`와 이전 `audio/SHA256`, `audio/notice-stale`를 삭제한다. 알려지지 않은 키는 보존한다. 한 번에 2,000개·약 22초까지 처리하고 다음 실행에서 계속한다.
@@ -60,4 +64,4 @@
 
 응답 `bars`는 `time`, `open`, `high`, `low`, `close`, `count`, `invalid_count`, `complete`다. 정상 기록이 없으면 온도 네 항목은 null이며 실패/공백을 0이나 38로 바꾸지 않는다. `complete`는 해당 시간 구간이 끝났는지다. `samples`, `invalid_samples`, `low`, `high`, `start`, `end`, `server_now`, `oldest_day`도 반환한다.
 
-색인 `trend/YYYY-MM-DD`는 버전·날짜·이전 이력 스캔 완료 여부와 `{UUID: [캡처 epoch ms, 값 또는 null, 상태, 기록 epoch ms]}`를 보관한다. ETag 조건부 병합으로 동시에 저장한 값·과거 재전송·중복 재전송을 보존한다. 최초 조회에서 이전 `records`를 한 번 병합하고, 이후 조회는 색인 1~2개만 읽는다. 30일 정리에 `trend/날짜`도 포함된다. 음성·이미지를 색인에 저장하지 않는다.
+색인 `trend/YYYY-MM-DD`는 버전·날짜·이전 이력 스캔 완료 여부와 `{UUID: [캡처 epoch ms, 값 또는 null, 상태, 기록 epoch ms, device_id]}`를 보관한다. ETag 조건부 병합으로 동시에 저장한 값·과거 재전송·중복 재전송을 보존한다. 최초 조회에서 이전 `records`를 한 번 병합하고, v2는 이전 색인에 장치 정보를 한 번 보강하며, 이후 조회는 경계에 따라 색인 1~3개만 읽는다. 30일 정리에 `trend/날짜`도 포함된다. 음성·이미지를 색인에 저장하지 않는다.

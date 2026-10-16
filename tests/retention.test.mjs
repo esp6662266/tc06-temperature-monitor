@@ -34,3 +34,8 @@ test('graph summary retention matches the records policy',async()=>{
  const store=new MemoryStore();await store.setJSON('trend/2026-09-16',{rows:{old:'expired'}});await store.setJSON('trend/2026-09-17',{rows:{kept:'retained'}});await store.set('trend/unknown-key','unknown');
  const result=await cleanupStore(store,{now});assert.equal(result.deleted_trends,1);assert.equal(await store.get('trend/2026-09-16'),null);assert.ok(await store.get('trend/2026-09-17'));assert.equal(await store.get('trend/unknown-key'),'unknown');
 });
+test('last normal state is removed on expiry but a simultaneous newer normal is preserved',async()=>{
+ const store=new MemoryStore();await store.setJSON('last-good',old);assert.equal((await cleanupStore(store,{now})).cleared_last_good,true);assert.equal(await store.get('last-good',{type:'json'}),null);
+ await store.setJSON('last-good',old);const get=store.getWithMetadata.bind(store);store.getWithMetadata=async(...args)=>{const result=await get(...args);if(args[0]==='last-good')await store.setJSON('last-good',fresh);return result;};
+ assert.equal((await cleanupStore(store,{now})).cleared_last_good,false);assert.deepEqual(await store.get('last-good',{type:'json'}),fresh);
+});

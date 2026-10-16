@@ -19,28 +19,39 @@ settings.customColor=/^#[0-9a-f]{6}$/i.test(settings.customColor)?settings.custo
 settings.size=Math.max(50,Math.min(100,Number(settings.size)||90));
 let latest=null,serverOffset=0,networkOK=false,enabled=false,nextAnnouncement=0,announcing=false,refreshPromise=null;
 let menuTimer=null,graph=null;
+let lastNormal=null,lastKind=null;
+try{lastNormal=JSON.parse(localStorage.getItem('tc06-last-good-v1')||'null');}catch{}
 const labels={anchor_missing:'TC-06을 찾을 수 없습니다',ambiguous_anchor:'TC-06 표시가 여러 개입니다',occluded:'온도 영역이 다른 창에 가려졌습니다',ocr_failed:'온도를 판독할 수 없습니다',value_suspect:'숫자 재확인이 필요합니다',low_confidence:'숫자가 선명하지 않습니다',freshness_unverified:'원본 시계의 진행을 확인 중입니다',stale_source:'원본 영상 정지가 의심됩니다',source_error:'영상 입력을 확인해 주세요',window_missing:'HMI 창을 확인해 주세요'};
 const formatTime=iso=>iso?new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date(iso)):'—';
 function fresh(){const age=Date.now()+serverOffset-Date.parse(latest?.captured_at);return networkOK&&age>=-30000&&age<=150000;}
 function good(){return fresh()&&latest?.status==='ok'&&Number.isFinite(latest.value_c);}
-function fitNumber(){if(document.body.dataset.mode!=='display')return;const el=byId('temperature');el.style.fontSize='100px';const factor=Math.min(innerWidth*.92/Math.max(el.getBoundingClientRect().width,1),innerHeight*.84/100)*settings.size/100;el.style.fontSize=`${Math.floor(100*factor)}px`;}
+function retainedNormal(record){const now=Date.now()+serverOffset;const oldest=new Date(now-29*86400000+9*3600000).toISOString().slice(0,10);return record?.status==='ok'&&Number.isFinite(record.value_c)&&Math.abs(record.value_c)<=9999.9&&Number.isFinite(Date.parse(record.captured_at))&&Date.parse(record.captured_at)<=now+30000&&new Date(Date.parse(record.captured_at)+9*3600000).toISOString().slice(0,10)>=oldest;}
+function rememberNormal(record){if(!retainedNormal(record))return;if(!retainedNormal(lastNormal)||Date.parse(record.captured_at)>=Date.parse(lastNormal.captured_at)){lastNormal=record;try{localStorage.setItem('tc06-last-good-v1',JSON.stringify(record));}catch{}}}
+function readingView(){if(good())return{kind:'good',record:latest,value:latest.value_c};if(retainedNormal(lastNormal))return{kind:'held',record:lastNormal,value:lastNormal.value_c};if(lastNormal){lastNormal=null;try{localStorage.removeItem('tc06-last-good-v1');}catch{}}return{kind:'fallback',record:null,value:38};}
+function ago(record){const minutes=Math.max(0,Math.floor((Date.now()+serverOffset-Date.parse(record.captured_at))/60000));if(minutes<1)return'1분 미만 전';if(minutes<60)return`${minutes}분 전`;if(minutes<1440)return`${Math.floor(minutes/60)}시간 ${minutes%60}분 전`;return`${Math.floor(minutes/1440)}일 ${Math.floor(minutes%1440/60)}시간 전`;}
+function fitNumber(){if(document.body.dataset.mode!=='display')return;const el=byId('temperature');el.style.fontSize='100px';const held=document.body.dataset.state==='held';const factor=Math.min(innerWidth*.92/Math.max(el.getBoundingClientRect().width,1),innerHeight*(held ? .68 : .84)/100)*settings.size/100;el.style.fontSize=`${Math.floor(100*factor)}px`;}
 function render(){
-  const valid=good();document.body.dataset.state=valid?'good':'fallback';
-  const text=valid?Number(latest.value_c).toFixed(1):'38';
-  if(byId('temperature').textContent!==text){byId('temperature').textContent=text;fitNumber();}
-  byId('quality').textContent=valid?'실제 수신값':'기본값 · 38도';
+  const view=readingView(),valid=view.kind==='good',held=view.kind==='held',changed=lastKind!==view.kind;document.body.dataset.state=view.kind;
+  const text=view.kind==='fallback'?'38':Number(view.value).toFixed(1);
+  if(byId('temperature').textContent!==text||changed){byId('temperature').textContent=text;fitNumber();}
+  const age=held?`마지막 정상값 · ${ago(view.record)}`:'';
+  byId('quality').textContent=valid?'실제 수신값':held?age:'기본값 · 38도';
   const reason=!networkOK?'서버 연결을 확인할 수 없습니다.':!latest?'아직 수신한 온도가 없습니다.':!fresh()?'최근 150초 이내 온도가 없습니다.':labels[latest.status]||'온도 정보를 확인해 주세요.';
-  byId('status').textContent=valid?'최근 저장된 온도입니다.':`${reason} 기본값 38도를 표시·안내합니다.`;
-  byId('captured').textContent=formatTime(latest?.captured_at);byId('received').textContent=formatTime(latest?.received_at);
+  byId('status').textContent=valid?'최근 저장된 온도입니다.':held?`${reason} ${age} 온도를 유지하고 있습니다.`:`${reason} 정상 수신 이력이 없어 기본값 38도를 표시·안내합니다.`;
+  byId('captured').textContent=formatTime(view.record?.captured_at);byId('received').textContent=formatTime(view.record?.received_at);
   byId('connection').textContent=networkOK?'서버 연결됨':'서버 연결 확인 필요';
   byId('countdown').textContent=enabled?`${Math.max(0,Math.ceil((nextAnnouncement-Date.now())/1000))}초`:'꺼짐';
-  byId('graph-temperature').textContent=text;byId('graph-quality').textContent=byId('quality').textContent;byId('graph-current-status').textContent=valid?`판독 ${formatTime(latest.captured_at)} · 서버 ${networkOK?'연결됨':'연결 확인 필요'}`:reason+' 기본값 38도 표시';byId('graph-speech').textContent=enabled?'음성 중지':'음성 시작';
+  byId('graph-temperature').textContent=text;byId('graph-quality').textContent=byId('quality').textContent;byId('graph-current-status').textContent=valid?`판독 ${formatTime(latest.captured_at)} · 서버 연결됨`:held?`${age} · 판독 ${formatTime(view.record.captured_at)} · ${reason}`:reason+' 기본값 38도 표시';byId('graph-speech').textContent=enabled?'음성 중지':'음성 시작';
+  byId('graph-reading-label').textContent=held?'TC-06 · 마지막 정상 온도':'TC-06 · 현재 온도';
+  byId('display-held').hidden=!held;if(byId('display-held').textContent!==age)byId('display-held').textContent=age;
+  if(held&&enabled){if(changed||voice.playing)voice.cancel();byId('audio-status').textContent=`${age} 표시 중 · 최신 온도로 오인하지 않도록 음성 안내 대기`;}else if(changed&&lastKind==='held'&&enabled){byId('audio-status').textContent='최신 정상 온도 수신 · 다음 주기부터 음성 안내를 재개합니다.';}
   byId('speech-start').disabled=enabled;byId('speech-stop').disabled=!enabled;byId('display-speech').textContent=enabled?'음성 중지':'음성 시작';
+  lastKind=view.kind;
 }
 function refresh(){
   if(refreshPromise)return refreshPromise;
   refreshPromise=(async()=>{const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),8000);
-    try{const response=await fetch('/api/latest',{cache:'no-store',signal:controller.signal});if(!response.ok)throw Error('server');const data=await response.json();if(!Number.isFinite(Date.parse(data.server_now)))throw Error('time');latest=data.record;serverOffset=Date.parse(data.server_now)-Date.now();networkOK=true;byId('updated').textContent=`조회 ${formatTime(data.server_now)}`;}
+    try{const response=await fetch('/api/latest',{cache:'no-store',signal:controller.signal});if(!response.ok)throw Error('server');const data=await response.json();if(!Number.isFinite(Date.parse(data.server_now)))throw Error('time');latest=data.record;serverOffset=Date.parse(data.server_now)-Date.now();rememberNormal(data.last_good);rememberNormal(latest);networkOK=true;byId('updated').textContent=`조회 ${formatTime(data.server_now)}`;}
     catch{networkOK=false;}finally{clearTimeout(timeout);render();}
   })().finally(()=>{refreshPromise=null;});return refreshPromise;
 }
@@ -48,7 +59,8 @@ async function announce(){
   if(!enabled||announcing||document.hidden)return;announcing=true;
   try{
     await refresh();if(!enabled)return;
-    const valid=good(),value=valid?latest.value_c:38;
+    const view=readingView();if(view.kind==='held'){byId('audio-status').textContent=`마지막 정상값 · ${ago(view.record)} 표시 중 · 음성 안내 대기`;return;}
+    const valid=view.kind==='good',value=view.value;
     const played=await voice.say(value,settings.volume);
     if(played&&enabled)byId('audio-status').textContent=`${valid?'실제 수신 온도':'기본값 38도'} · 웹 숫자 TTS · ${settings.interval/60}분마다 한국어 여성 음성 안내`;
   }catch(error){byId('audio-status').textContent=error.message||'음성 시작을 다시 눌러 주세요.';}

@@ -86,3 +86,39 @@ test('retention policy is public and expired latest is hidden before physical cl
   assert.equal((await(await api(req('latest'))).json()).record,null);
   assert.equal((await(await api(req('retention'))).json()).retention_days,30);
 });
+
+test('failed OCR keeps the real last normal record with its original timestamps',async()=>{
+ const {store,api}=await fixture(),good=record(600000);
+ await api(req('ingest',{method:'POST',body:{record:good}}));
+ for(const [index,status] of ['value_suspect','low_confidence','stale_source','source_error'].entries()){
+  const bad=record((4-index)*1000,{status,value_c:null});await api(req('ingest',{method:'POST',body:{record:bad}}));
+  const data=await(await api(req('latest'))).json();assert.equal(data.record.status,status);assert.equal(data.last_good.id,good.id);assert.equal(data.last_good.captured_at,good.captured_at);assert.equal(data.last_good.value_c,good.value_c);
+ }
+ assert.equal([...store.data.keys()].filter(k=>k.startsWith('records/')).length,5);
+});
+test('offline and concurrent normal retries cannot move last normal state backwards',async()=>{
+ const {store,api}=await fixture(),rows=Array.from({length:6},(_,i)=>record((6-i)*1000));
+ await Promise.all(rows.map(row=>updateLatest(store,row,'last-good')));
+ await api(req('ingest',{method:'POST',body:{record:rows[0]}}));
+ assert.equal((await(await api(req('latest'))).json()).last_good.id,rows.at(-1).id);
+});
+test('a new browser can recover last normal from existing pre-upgrade history once',async()=>{
+ const {store,api}=await fixture(),good=record(600000),older=record(86400000),bad=record(0,{status:'value_suspect',value_c:null});
+ for(const row of [good,older,bad])await store.setJSON(`records/${new Date(Date.parse(row.captured_at)+9*3600000).toISOString().slice(0,10)}/${row.id}`,row);
+ await store.setJSON('latest',bad);let lists=0;const list=store.list.bind(store);store.list=(...args)=>{lists++;return list(...args);};
+ const data=await(await api(req('latest'))).json();assert.equal(data.last_good.id,good.id);assert.equal(data.last_good.captured_at,good.captured_at);const after=lists;
+ await api(req('latest'));assert.equal(lists,after);assert.equal([...store.data.keys()].filter(k=>k.startsWith('records/')).length,3);
+});
+test('empty last normal bootstrap is memoized and normal collection resumes it',async()=>{
+ const {store,api}=await fixture();let lists=0;const list=store.list.bind(store);store.list=(...args)=>{lists++;return list(...args);};
+ assert.equal((await(await api(req('latest'))).json()).last_good,null);await api(req('latest'));assert.equal(lists,1);
+ const row=record();await api(req('ingest',{method:'POST',body:{record:row}}));assert.equal((await(await api(req('latest'))).json()).last_good.id,row.id);
+});
+test('expired last normal values are never exposed to a new browser',async()=>{
+ const {store,api}=await fixture();await store.setJSON('last-good',record(40*86400000));assert.equal((await(await api(req('latest'))).json()).last_good,null);
+});
+test('historical bootstrap cannot overwrite a newer normal upload arriving during recovery',async()=>{
+ const {store,api}=await fixture(),old=record(600000),newer=record();const key=`records/${new Date(Date.parse(old.captured_at)+9*3600000).toISOString().slice(0,10)}/${old.id}`;
+ await store.setJSON(key,old);const get=store.get.bind(store);let injected=false;store.get=async(k,options)=>{const data=await get(k,options);if(k===key&&!injected){injected=true;await updateLatest(store,newer,'last-good');}return data;};
+ assert.equal((await(await api(req('latest'))).json()).last_good.id,newer.id);
+});

@@ -1,4 +1,4 @@
-import { updateTrend, getTrend } from './trend.mjs';
+import { updateTrend, getTrend, readDay } from './trend.mjs';
 import { RETENTION_DAYS, dayKST, oldestDay, expired } from './retention.mjs';
 
 const STATUSES = new Set(['ok', 'anchor_missing', 'ambiguous_anchor', 'occluded', 'ocr_failed',
@@ -51,16 +51,51 @@ export function validateRecord(raw, now = Date.now()) {
     source_clock: typeof raw.source_clock === 'string' ? raw.source_clock.slice(0, 16) : null };
 }
 
-export async function updateLatest(store, record) {
+export async function updateLatest(store, record, key = 'latest') {
   // Conditional writes prevent old retries and concurrent requests from replacing newer state.
   for (let attempt = 0; attempt < 8; attempt++) {
-    const previous = await store.getWithMetadata('latest', { type: 'json', consistency: 'strong' });
+    const previous = await store.getWithMetadata(key, { type: 'json', consistency: 'strong' });
     if (previous?.data && rank(previous.data) >= rank(record)) return;
     const condition = previous ? { onlyIfMatch: previous.etag } : { onlyIfNew: true };
-    const outcome = await store.setJSON('latest', record, condition);
+    const outcome = await store.setJSON(key, record, condition);
     if (outcome.modified) return;
   }
   throw new Error('Latest conflict; retry upload');
+}
+
+const normal = (record, now) => record?.asset === 'TC-06' && record.status === 'ok' && Number.isFinite(record.value_c) &&
+  Number.isFinite(Date.parse(record.captured_at)) && Date.parse(record.captured_at) <= now + 30_000 && !expired(record, now);
+
+export async function lastGood(store, current, now = Date.now()) {
+  const previous = await store.getWithMetadata('last-good', { type: 'json', consistency: 'strong' });
+  if (normal(current, now) && (!previous?.data || rank(current) > rank(previous.data))) {
+    await updateLatest(store, current, 'last-good');
+  } else if (!previous) {
+    // One-time upgrade: recover the real newest normal record, not a new reading.
+    const days = new Set();
+    for await (const page of store.list({ prefix: 'records/', directories: true, paginate: true })) {
+      for (const directory of page.directories || []) {
+        const match = directory.match(/^(?:records\/)?(\d{4}-\d{2}-\d{2})\/?$/);
+        if (match && match[1] >= oldestDay(now) && match[1] <= dayKST(now)) days.add(match[1]);
+      }
+    }
+    let found = false;
+    for (const day of [...days].sort().reverse()) {
+      const index = await readDay(store, day);
+      const candidates = Object.entries(index.rows).filter(([, row]) => row[2] === 'ok' && Number.isFinite(row[1]) && row[0] <= now + 30_000)
+        .sort((a, b) => b[1][0] - a[1][0] || b[1][3] - a[1][3] || b[0].localeCompare(a[0]));
+      for (const [id] of candidates) {
+        const record = await store.get(`records/${day}/${id}`, { type: 'json', consistency: 'strong' });
+        if (normal(record, now)) { await updateLatest(store, record, 'last-good'); found = true; break; }
+      }
+      if (found) break;
+    }
+    if (!found) await store.setJSON('last-good', null, { onlyIfNew: true });
+  } else {
+    return normal(previous.data, now) ? previous.data : null;
+  }
+  const stored = await store.get('last-good', { type: 'json', consistency: 'strong' });
+  return normal(stored, now) ? stored : null;
 }
 
 export function createAPI(getStore) {
@@ -85,6 +120,7 @@ export function createAPI(getStore) {
         // Use canonical first-write content on retries; immutable record history.
         const canonical = await store.get(key, { type: 'json', consistency: 'strong' });
         await updateTrend(store, canonical);
+        if (canonical.status === 'ok') await updateLatest(store, canonical, 'last-good');
         await updateLatest(store, canonical);
         return json({ saved: true, id: canonical.id });
       } catch { return json({ error: '저장 실패. 같은 id로 재전송하세요' }, 503); }
@@ -96,7 +132,8 @@ export function createAPI(getStore) {
         const stored = await store.get('latest', { type: 'json', consistency: 'strong' });
         const record = stored && !expired(stored) ? stored : null;
         const ageMs = record ? Date.now() - Date.parse(record.captured_at) : null;
-        return json({ retention_days: RETENTION_DAYS, oldest_day: oldestDay(), record, server_now: new Date().toISOString(), max_age_ms: AGE_MS,
+        const last_good = await lastGood(store, record);
+        return json({ retention_days: RETENTION_DAYS, oldest_day: oldestDay(), record, last_good, server_now: new Date().toISOString(), max_age_ms: AGE_MS,
           fresh: Boolean(record && ageMs >= -30_000 && ageMs <= AGE_MS) });
       }
       if (action === 'audio') return json({ error: '웹 숫자 TTS로 전환되어 서버 음성 저장을 종료했습니다' }, 410);

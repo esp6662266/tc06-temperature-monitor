@@ -12,7 +12,7 @@ export function expired(record, now = Date.now()) {
 export async function cleanupStore(store, { now = Date.now(), limit = 2000, budgetMs = 22000 } = {}) {
   const started = Date.now(), cutoff = oldestDay(now);
   const summary = { ran_at: new Date(now).toISOString(), retention_days: RETENTION_DAYS,
-    oldest_day: cutoff, deleted_records: 0, deleted_audio: 0, deleted_trends: 0, cleared_latest: false, limit_reached: false };
+    oldest_day: cutoff, deleted_records: 0, deleted_audio: 0, deleted_trends: 0, cleared_latest: false, cleared_last_good: false, limit_reached: false };
   const dates = new Set();
   for await (const page of store.list({ prefix: 'records/', directories: true, paginate: true })) {
     for (const directory of page.directories || []) {
@@ -43,6 +43,11 @@ export async function cleanupStore(store, { now = Date.now(), limit = 2000, budg
     // A conditional null tombstone cannot erase a simultaneous new reading.
     const result = await store.setJSON('latest', null, { onlyIfMatch: latest.etag });
     summary.cleared_latest = result.modified;
+  }
+  const good = await store.getWithMetadata('last-good', { type: 'json', consistency: 'strong' });
+  if (good?.data && expired(good.data, now)) {
+    const result = await store.setJSON('last-good', null, { onlyIfMatch: good.etag });
+    summary.cleared_last_good = result.modified;
   }
   await store.setJSON('maintenance/retention', summary);
   return summary;

@@ -3,14 +3,14 @@ import { randomUUID } from 'node:crypto';
 
 // Synthetic browser fixtures only; never live PLC data.
 function sample(extra={}) {const at=new Date().toISOString();return {record:{id:'fixture',audio_id:'a'.repeat(64),value_c:123.4,status:'ok',captured_at:at,received_at:at,has_audio:true,...extra},server_now:at,max_age_ms:150000,fresh:true};}
-test('normal screen distinguishes received readings from all 38-degree fallback states',async({page})=>{
+test('normal screen retains the last normal reading during stale, invalid and offline states',async({page})=>{
   let body=sample(),offline=false;
   await page.route('**/api/latest',route=>offline?route.abort():route.fulfill({json:body}));
   await page.goto('/?mode=normal');await expect(page.locator('#temperature')).toHaveText('123.4');await expect(page.locator('#quality')).toHaveText('실제 수신값');
   body=sample({captured_at:new Date(Date.now()-200000).toISOString()});await page.evaluate(()=>refresh());
-  await expect(page.locator('#temperature')).toHaveText('38');await expect(page.locator('#quality')).toHaveText('기본값 · 38도');
+  await expect(page.locator('#temperature')).toHaveText('123.4');await expect(page.locator('#quality')).toContainText('마지막 정상값');
   body=sample({status:'ocr_failed',value_c:null});await page.evaluate(()=>refresh());await expect(page.locator('#status')).toContainText('판독할 수 없습니다');
-  offline=true;await page.evaluate(()=>refresh());await expect(page.locator('#connection')).toHaveText('서버 연결 확인 필요');await expect(page.locator('#temperature')).toHaveText('38');
+  offline=true;await page.evaluate(()=>refresh());await expect(page.locator('#connection')).toHaveText('서버 연결 확인 필요');await expect(page.locator('#temperature')).toHaveText('123.4');
 });
 test('first visit is a numbers-only display, with remote-accessible normal settings',async({page})=>{
   await page.route('**/api/latest',route=>route.fulfill({json:{record:null,server_now:new Date().toISOString()}}));
@@ -18,13 +18,14 @@ test('first visit is a numbers-only display, with remote-accessible normal setti
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth&&document.documentElement.scrollHeight<=innerHeight)).toBe(true);
   await page.keyboard.press('Enter');await expect(page.locator('#normal-mode')).toBeVisible();await page.locator('#normal-mode').click();await expect(page.locator('main > header')).toBeVisible();await expect(page).toHaveURL(/mode=normal/);expect(await page.locator('#temperature').evaluate(el=>parseFloat(getComputedStyle(el).fontSize))).toBeLessThan(400);await expect(page.locator('input[type=password]')).toHaveCount(0);
 });
-test('web number voice reads the latest value every minute and 38 when stale',async({page})=>{
+test('web number voice pauses for held readings and resumes after recovery',async({page})=>{
   let body=sample();await page.route('**/api/latest',route=>route.fulfill({json:body}));
   await page.clock.install();await page.goto('/?mode=normal');await expect(page.locator('#temperature')).toHaveText('123.4');
   await page.locator('#speech-start').click();await expect.poll(()=>page.evaluate(()=>voice.lastValue)).toBe(123.4);
   expect(await page.evaluate(()=>voice.lastTokens)).toEqual(['intro','100','2','10','3','point','4','end']);
   body=sample({id:'new-fixture',value_c:124.5});await page.clock.fastForward(60001);await expect.poll(()=>page.evaluate(()=>voice.lastValue)).toBe(124.5);
-  body=sample({captured_at:new Date(Date.now()-300000).toISOString()});await page.clock.fastForward(60001);await expect.poll(()=>page.evaluate(()=>voice.lastValue)).toBe(38);await expect(page.locator('#audio-status')).toContainText('기본값 38도');
+  body=sample({captured_at:new Date(Date.now()-300000).toISOString()});await page.clock.fastForward(60001);await expect(page.locator('body')).toHaveAttribute('data-state','held');await expect(page.locator('#audio-status')).toContainText('음성 안내 대기');expect(await page.evaluate(()=>voice.lastValue)).toBe(124.5);
+  body=sample({id:'recovered-fixture',value_c:125.6});await page.clock.fastForward(60001);await expect.poll(()=>page.evaluate(()=>voice.lastValue)).toBe(125.6);
   await page.locator('#speech-stop').click();await expect(page.locator('#countdown')).toHaveText('꺼짐');expect(await page.evaluate(()=>voice.playing)).toBe(false);
 });
 test('local HTTP accepts anonymous upload and publicly displays it',async({page,request})=>{
@@ -43,7 +44,7 @@ test('TV display preferences persist after reload',async({page})=>{
   await expect(page.locator('#color')).toHaveValue('amber');await expect(page.locator('#interval')).toHaveValue('120');await expect(page.locator('#volume')).toHaveValue('0.4');await page.keyboard.press('Escape');await page.locator('#display-mode').click();await expect(page.locator('body')).toHaveAttribute('data-mode','display');expect(await page.locator('#temperature').evaluate(el=>getComputedStyle(el).color)).toBe('rgb(255, 230, 0)');
 });
 test('cached page reloads offline and composes the fixed 38 voice in Web Audio',async({browser})=>{
-  const context=await browser.newContext({serviceWorkers:'allow'});const page=await context.newPage();await page.goto('http://127.0.0.1:8766/?mode=normal');
+  const context=await browser.newContext({serviceWorkers:'allow'});const page=await context.newPage();await page.route('**/api/latest',route=>route.fulfill({json:{record:null,last_good:null,server_now:new Date().toISOString()}}));await page.goto('http://127.0.0.1:8766/?mode=normal');
   await page.evaluate(async()=>{await navigator.serviceWorker.ready;if(!navigator.serviceWorker.controller)await new Promise(resolve=>navigator.serviceWorker.addEventListener('controllerchange',resolve,{once:true}));});
   await context.setOffline(true);await page.reload();await expect(page.locator('#temperature')).toHaveText('38');await page.locator('#speech-start').click();
   await expect.poll(()=>page.evaluate(()=>voice.lastValue)).toBe(38);expect(await page.evaluate(()=>voice.buffers.size)).toBe(17);
@@ -89,7 +90,7 @@ test('graph refreshes each minute and preserves labelled historical data on conn
  let offline=false,version=0;await page.route('**/api/latest',route=>offline?route.abort():route.fulfill({json:sample()}));
  await page.route('**/api/trend**',route=>{if(offline)return route.abort();const data=trendSample();data.high=150+version;return route.fulfill({json:data});});
  await page.clock.install();await page.goto('/?mode=graph');await expect(page.locator('#graph-high')).toHaveText('150.0 ℃');version=1;await page.clock.fastForward(60001);await expect(page.locator('#graph-high')).toHaveText('151.0 ℃');
- offline=true;await page.evaluate(()=>Promise.all([refresh(),graph.load(true)]));await expect(page.locator('#graph-temperature')).toHaveText('38');await expect(page.locator('#graph-status')).toContainText('마지막 조회');await expect(page.locator('.candle')).toHaveCount(60);
+ offline=true;await page.evaluate(()=>Promise.all([refresh(),graph.load(true)]));await expect(page.locator('#graph-temperature')).toHaveText('123.4');await expect(page.locator('#graph-quality')).toContainText('마지막 정상값');await expect(page.locator('#graph-status')).toContainText('마지막 조회');await expect(page.locator('.candle')).toHaveCount(60);
 });
 test('graph date, range and navigation work without login',async({page})=>{
  await page.route('**/api/trend**',route=>route.fulfill({json:trendSample(10)}));await page.goto('/?mode=graph&minutes=10&span=1440');
@@ -101,4 +102,42 @@ test('graph automatically expands its temperature axis to include 900 degrees',a
  await page.route('**/api/latest',route=>route.fulfill({json:sample({value_c:900})}));await page.route('**/api/trend**',route=>route.fulfill({json:data}));await page.goto('/?mode=graph&minutes=10');
  await expect(page.locator('#graph-temperature')).toHaveText('900.0');await expect(page.locator('#graph-high')).toHaveText('900.0 ℃');
  const ticks=await page.locator('.chart-grid text').allTextContents();expect(Math.max(...ticks.map(Number).filter(Number.isFinite))).toBeGreaterThanOrEqual(900);expect(Number(await page.locator('.wick').first().getAttribute('y1'))).toBeGreaterThanOrEqual(30);
+});
+
+
+test('new viewers recover the server last normal value and its original age in all modes',async({page})=>{
+ const now=Date.now(),captured=new Date(now-7*60000).toISOString();await page.clock.install({time:now});
+ const body={...sample({status:'ocr_failed',value_c:null}),server_now:new Date(now).toISOString(),last_good:sample({value_c:906.7,captured_at:captured}).record};
+ await page.route('**/api/latest',route=>route.fulfill({json:body}));await page.route('**/api/trend**',route=>route.fulfill({json:trendSample(1,true)}));
+ await page.goto('/?mode=normal');await expect(page.locator('#temperature')).toHaveText('906.7');await expect(page.locator('#quality')).toHaveText('마지막 정상값 · 7분 전');
+ await expect(page.locator('#captured')).toHaveText(await page.evaluate(at=>new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date(at)),captured));
+ await page.locator('#display-mode').click();await expect(page.locator('#display-held')).toBeVisible();await expect(page.locator('#display-held')).toHaveText('마지막 정상값 · 7분 전');
+ await page.keyboard.press('Enter');await page.locator('#display-to-graph').click();await expect(page.locator('#graph-temperature')).toHaveText('906.7');await expect(page.locator('#graph-reading-label')).toContainText('마지막 정상 온도');await expect(page.locator('.candle')).toHaveCount(0);
+});
+test('held age advances without a new measurement, then disappears on recovery',async({page})=>{
+ const now=Date.now();let serverNow=now,normal=false;const saved=sample({value_c:999.9,captured_at:new Date(now-3*60000).toISOString()}).record;
+ await page.clock.install({time:now});await page.route('**/api/latest',route=>route.fulfill({json:{record:normal?{...saved,value_c:1000,captured_at:new Date(serverNow).toISOString()}:null,last_good:saved,server_now:new Date(serverNow).toISOString()}}));
+ await page.goto('/?mode=display');await expect(page.locator('#display-held')).toHaveText('마지막 정상값 · 3분 전');
+ serverNow+=60000;await page.clock.fastForward(60000);await expect(page.locator('#display-held')).toHaveText('마지막 정상값 · 4분 전');
+ normal=true;await page.evaluate(()=>refresh());await expect(page.locator('#temperature')).toHaveText('1000.0');await expect(page.locator('#display-held')).toBeHidden();await expect(page.locator('body')).toHaveAttribute('data-state','good');
+});
+test('cached last normal value survives reload and API outage without changing capture time',async({page})=>{
+ const now=Date.now(),captured=new Date(now-5*60000).toISOString();let offline=false;
+ await page.clock.install({time:now});await page.route('**/api/latest',route=>offline?route.abort():route.fulfill({json:{record:null,last_good:sample({value_c:700.1,captured_at:captured}).record,server_now:new Date(now).toISOString()}}));
+ await page.goto('/?mode=normal');await expect(page.locator('#temperature')).toHaveText('700.1');offline=true;await page.reload();
+ await expect(page.locator('#quality')).toHaveText('마지막 정상값 · 5분 전');await expect(page.locator('#temperature')).toHaveText('700.1');expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('tc06-last-good-v1')).captured_at)).toBe(captured);
+});
+test('expired and future cache entries never become held temperatures',async({page})=>{
+ const now=Date.now(),old=sample({captured_at:new Date(now-31*86400000).toISOString()}).record;
+ await page.addInitScript(record=>localStorage.setItem('tc06-last-good-v1',JSON.stringify(location.search.includes('future')?{...record,captured_at:new Date(Date.now()+86400000).toISOString()}:record)),old);
+ await page.route('**/api/latest',route=>route.fulfill({json:{record:null,last_good:old,server_now:new Date(now).toISOString()}}));
+ await page.goto('/?mode=display');await expect(page.locator('#temperature')).toHaveText('38');await expect(page.locator('#display-held')).toBeHidden();
+ await page.goto('/?mode=display&future=1');await expect(page.locator('#temperature')).toHaveText('38');
+});
+test('held numeric display keeps both number and age within TV and narrow screens',async({page})=>{
+ const now=Date.now();await page.route('**/api/latest',route=>route.fulfill({json:{record:null,last_good:sample({value_c:1000.9,captured_at:new Date(now-125*60000).toISOString()}).record,server_now:new Date(now).toISOString()}}));
+ await page.goto('/?mode=display');for(const size of [{width:1920,height:1080},{width:390,height:844}]){
+   await page.setViewportSize(size);await expect(page.locator('#display-held')).toBeVisible();await expect(page.locator('#temperature')).toHaveText('1000.9');
+   await expect.poll(async()=>{const box=await page.locator('#temperature').boundingBox();return box.x>=0&&box.x+box.width<=size.width;}).toBe(true);const value=await page.locator('#temperature').boundingBox(),label=await page.locator('#display-held').boundingBox();expect(value.x).toBeGreaterThanOrEqual(0);expect(value.y).toBeGreaterThanOrEqual(0);expect(value.x+value.width).toBeLessThanOrEqual(size.width);expect(value.y+value.height).toBeLessThanOrEqual(label.y);expect(label.y+label.height).toBeLessThanOrEqual(size.height);
+ }
 });

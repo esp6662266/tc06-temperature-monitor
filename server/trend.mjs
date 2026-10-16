@@ -24,7 +24,7 @@ export async function mergeTrend(store, day, records, complete = false) {
 export async function updateTrend(store, record) {
   return mergeTrend(store, dayKST(record.captured_at), [record]);
 }
-async function readDay(store, day) {
+export async function readDay(store, day) {
   const indexed = await store.get(summaryKey(day), {type:'json',consistency:'strong'});
   if (indexed?.complete) return indexed;
   // Upgrade old history once, and merge with uploads that arrived during scanning.

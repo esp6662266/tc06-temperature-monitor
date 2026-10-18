@@ -1,17 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { generateKeyPairSync, sign } from 'node:crypto';
+import { createHash, generateKeyPairSync, sign } from 'node:crypto';
 import { createUpdates, verifyRelease } from '../server/updates.mjs';
 import { MemoryStore } from '../server/memory-store.mjs';
 
 const admin='A'.repeat(43),deviceId='synthetic-pc';
-function setup(){
+function setup(adminCode=admin){
  const store=new MemoryStore();let time=Date.now();const keys=generateKeyPairSync('ed25519');
  const publicKey=keys.publicKey.export({format:'der',type:'spki'}).subarray(-32).toString('base64');
- const api=createUpdates(()=>store,{adminToken:()=>admin,now:()=>time,publicKey});
+ const api=createUpdates(()=>store,{adminToken:()=>adminCode,now:()=>time,publicKey});
  const payload=Buffer.from(JSON.stringify({version:'0.6.1',url:'https://github.com/esp6662266/tc06-temperature-monitor/releases/download/v0.6.1/TC06Monitor-Portable-0.6.1-x64.zip',size:1000,unpacked_size:2000,sha256:'a'.repeat(64)}));
  const envelope={payload:payload.toString('base64'),signature:sign(null,payload,keys.privateKey).toString('base64')};
- const call=async(path,{auth=admin,data,nonce,origin}={})=>api(new Request('https://tc06.test/api/updates/'+path,{method:data?'POST':'GET',headers:{Authorization:'Bearer '+auth,...(data?{'Content-Type':'application/json'}:{}),...(nonce?{'X-Update-Nonce':nonce}:{}),...(origin?{Origin:origin}:{})},body:data?JSON.stringify(data):undefined}));
+ const call=async(path,{auth=adminCode,data,nonce,origin}={})=>api(new Request('https://tc06.test/api/updates/'+path,{method:data?'POST':'GET',headers:{Authorization:'Bearer '+auth,...(data?{'Content-Type':'application/json'}:{}),...(nonce?{'X-Update-Nonce':nonce}:{}),...(origin?{Origin:origin}:{})},body:data?JSON.stringify(data):undefined}));
  const adminPost=async(action,data)=>{const n=await(await call('admin/nonce')).json();return call('admin/'+action,{data,nonce:n.nonce});};
  const pair=async()=>{const r=await adminPost('pair',{device_id:deviceId});assert.equal(r.status,200);return (await r.json()).token;};
  const heartbeat=(token,extra={})=>call('device/'+deviceId+'/heartbeat',{auth:token,data:{version:'0.6.0',status:'idle',available:{envelope},...extra}});
@@ -23,6 +23,14 @@ test('update routes are disabled without configuration; wrong credentials and fo
  const s=setup();assert.equal((await s.call('admin/overview',{auth:'B'.repeat(43)})).status,401);
  assert.equal((await s.call('admin/overview',{origin:'https://evil.example'})).status,403);
  assert.equal((await s.call('admin/pair',{data:{device_id:deviceId}})).status,403);
+});
+
+test('eight-character admin codes work while short device credentials remain refused',async()=>{
+ const s=setup('fixture8');
+ assert.equal((await s.call('admin/overview')).status,200);
+ assert.equal((await s.call('admin/overview',{auth:'fixture9'})).status,401);
+ await s.store.setJSON('devices/'+deviceId,{device_id:deviceId,token_hash:createHash('sha256').update('fixture8').digest('hex')});
+ assert.equal((await s.heartbeat('fixture8')).status,401);
 });
 
 test('pairing issues unique scoped tokens and never exposes token hashes in overview',async()=>{

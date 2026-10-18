@@ -183,7 +183,7 @@ test('a forecast-only window remains visible while measured extrema stay empty',
 });
 
 test('update admin requires authentication and explicit apply; tokens are never persisted',async({page})=>{
- const adminToken='synthetic-admin-token-'.padEnd(43,'x');let commands=0;
+ const adminToken='fixture8';let commands=0;
  const device={device_id:'synthetic-pc',version:'0.6.0',status:'idle',online:true,seen_at:Date.now(),available:{version:'0.6.1'},command:null};
  await page.route('**/api/updates/admin/**',async route=>{
   expect(route.request().headers().authorization).toBe('Bearer '+adminToken);

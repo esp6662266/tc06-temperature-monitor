@@ -7,7 +7,10 @@ const STATES = new Set(['idle','downloading','ready','switching','completed','ro
 const REPO = 'https://github.com/esp6662266/tc06-temperature-monitor';
 const digest = value => createHash('sha256').update(value).digest('hex');
 const equal = (left, right) => timingSafeEqual(Buffer.from(digest(left)), Buffer.from(digest(right)));
-const token = request => request.headers.get('Authorization')?.match(/^Bearer ([A-Za-z0-9_-]{40,100})$/)?.[1] || '';
+const token = (request, minimum=40) => {
+  const value=request.headers.get('Authorization')?.match(/^Bearer ([A-Za-z0-9_-]{8,100})$/)?.[1] || '';
+  return value.length>=minimum?value:'';
+};
 const version = value => typeof value === 'string' && /^\d{1,4}\.\d{1,4}\.\d{1,4}$/.test(value);
 const newer = (left, right) => {
   const a=left.split('.').map(Number),b=right.split('.').map(Number);
@@ -74,10 +77,10 @@ export function createUpdates(getStore,{adminToken=()=>process.env.TC06_UPDATE_A
       if(origin && origin!==url.origin)return reply({error:'Origin refused'},403);
       if(!['GET','POST'].includes(request.method))return reply({error:'Method refused'},405);
       const secret=adminToken();
-      if(!/^[A-Za-z0-9_-]{40,100}$/.test(secret))return reply({error:'업데이트 관리 연결 전'},503);
+      if(!/^[A-Za-z0-9_-]{8,100}$/.test(secret))return reply({error:'업데이트 관리 연결 전'},503);
       const store=getStore(),time=now();
       if(parts[2]==='admin') {
-        if(!token(request)||!equal(token(request),secret))return reply({error:'관리자 인증을 확인하세요'},401);
+        if(!token(request,8)||!equal(token(request,8),secret))return reply({error:'관리자 인증을 확인하세요'},401);
         if(request.method==='GET' && parts[3]==='overview'){
           const devices=[];
           for await(const page of store.list({prefix:'devices/',paginate:true}))for(const item of page.blobs||[]){

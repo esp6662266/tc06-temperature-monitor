@@ -9,7 +9,7 @@
   function element(tag,attributes={},text){const node=document.createElementNS(NS,tag);for(const [key,value]of Object.entries(attributes))node.setAttribute(key,String(value));if(text!==undefined)node.textContent=text;return node;}
   class Graph {
     constructor(now=Date.now){
-      this.now=now;this.data=null;this.pending=null;this.abort=null;this.sequence=0;this.loadedAt=0;this.selected=-1;this.followToday=true;
+      this.now=now;this.data=null;this.error=null;this.pending=null;this.abort=null;this.sequence=0;this.loadedAt=0;this.selected=-1;this.followToday=true;
       let saved={};try{saved=JSON.parse(localStorage.getItem('tc06-graph-v1')||'{}');}catch{}
       const query=new URLSearchParams(location.search);
       this.minutes=Number(query.get('minutes')||saved.minutes||1);if(![1,5,10].includes(this.minutes))this.minutes=1;
@@ -24,7 +24,30 @@
       svg.addEventListener('keydown',event=>{if(!this.data?.bars.length)return;const last=this.data.bars.length-1;
         if(['ArrowLeft','ArrowRight','Home','End'].includes(event.key)){event.preventDefault();event.stopPropagation();this.selected=event.key==='Home'?0:event.key==='End'?last:Math.max(0,Math.min(last,(this.selected<0?last:this.selected)+(event.key==='ArrowLeft'?-1:1)));this.detail();}});
       if('ResizeObserver'in window)new ResizeObserver(()=>this.draw()).observe($('chart-wrap'));else window.addEventListener('resize',()=>this.draw());
-      this.controls();
+      this.setupOptions();this.controls();
+    }
+    validOptions(options){
+      const finite=value=>typeof value==='number'&&Number.isFinite(value)&&Math.abs(value)<=9999.9;
+      return options&&['auto','fixed'].includes(options.axis)&&typeof options.reference==='boolean'&&
+        (options.axis==='auto'||(finite(options.min)&&finite(options.max)&&options.max-options.min>=0.099999))&&
+        (!options.reference||(finite(options.target)&&finite(options.low)&&finite(options.high)&&options.high-options.low>=0.099999));
+    }
+    setupOptions(){
+      const defaults={axis:'auto',min:null,max:null,reference:false,target:null,low:null,high:null};
+      let saved;try{saved=JSON.parse(localStorage.getItem('tc06-graph-view-v1')||'null');}catch{}
+      this.options=this.validOptions(saved)?saved:defaults;
+      const fields={axis:'axis-mode',min:'axis-min',max:'axis-max',target:'target-value',low:'reference-min',high:'reference-max'};
+      for(const [key,id]of Object.entries(fields))$(id).value=this.options[key]??'';
+      $('reference-enabled').checked=this.options.reference;
+      const toggle=()=>{for(const id of ['axis-min','axis-max'])$(id).disabled=$('axis-mode').value!=='fixed';for(const id of ['target-value','reference-min','reference-max'])$(id).disabled=!$('reference-enabled').checked;};
+      $('axis-mode').addEventListener('change',toggle);$('reference-enabled').addEventListener('change',toggle);toggle();
+      $('graph-options-form').noValidate=true;
+      $('graph-options-form').addEventListener('submit',event=>{event.preventDefault();
+        const numeric=id=>$(id).value.trim()===''?null:Number($(id).value);
+        const next={axis:$('axis-mode').value,min:numeric('axis-min'),max:numeric('axis-max'),reference:$('reference-enabled').checked,target:numeric('target-value'),low:numeric('reference-min'),high:numeric('reference-max')};
+        if(!this.validOptions(next)){$('graph-options-error').textContent='축·참고 범위는 최솟값이 최댓값보다 작아야 합니다. 사용하는 항목에 −9999.9~9999.9℃의 숫자를 모두 입력하세요.';return;}
+        this.options=next;try{localStorage.setItem('tc06-graph-view-v1',JSON.stringify(next));$('graph-options-error').textContent='';}catch{$('graph-options-error').textContent='브라우저 저장소를 사용할 수 없어 이번 화면에만 적용했습니다.';}this.draw();
+      });
     }
     save(){try{localStorage.setItem('tc06-graph-v1',JSON.stringify({minutes:this.minutes,span:this.span}));}catch{}this.controls();}
     controls(){for(const button of document.querySelectorAll('[data-minutes]'))button.setAttribute('aria-pressed',String(Number(button.dataset.minutes)===this.minutes));}
@@ -35,7 +58,7 @@
       const key=`${date}/${this.minutes}/${this.span}`;
       if(!force&&this.key===key&&Date.now()-this.loadedAt<30000){this.draw();return;}
       if(!force&&this.pendingKey===key&&this.pending)return this.pending;
-      if(this.key!==key){this.data=null;this.selected=-1;this.draw();}
+      if(this.key!==key){this.data=null;this.error=null;this.selected=-1;this.draw();}
       this.abort?.abort();const sequence=++this.sequence;const controller=new AbortController();this.abort=controller;this.pendingKey=key;
       $('graph-status').textContent='저장 이력을 불러오고 있습니다…';
       const timeout=setTimeout(()=>controller.abort(),20000);
@@ -43,11 +66,11 @@
         try{
           const response=await fetch(`/api/trend?day=${encodeURIComponent(date)}&minutes=${this.minutes}&span=${this.span}`,{cache:'no-store',signal:controller.signal});
           const data=await response.json();if(!response.ok)throw Error(data.error||'그래프 조회 실패');if(sequence!==this.sequence)return;
-          this.data=data;this.key=key;this.loadedAt=Date.now();this.selected=-1;
+          this.error=null;this.data=data;this.key=key;this.loadedAt=Date.now();this.selected=data.bars.reduce((last,bar,index)=>bar.count?index:last,-1);
           $('graph-day').min=data.oldest_day;$('graph-day').max=day(Date.parse(data.server_now));
-          $('graph-status').textContent=`조회 ${stamp.format(new Date(data.server_now))} · ${data.samples.toLocaleString('ko-KR')}건 · 판독 실패 ${data.invalid_samples}건 · 추정 ${(data.estimates||[]).length}건 · 1분마다 갱신`;
+          $('graph-status').textContent=`조회 ${stamp.format(new Date(data.server_now))} · 실측 ${data.samples.toLocaleString('ko-KR')}건 · 판독 실패 ${data.invalid_samples}건 · 추정 ${(data.estimates||[]).length}건 · 1분마다 갱신`;
           this.draw();
-        }catch(error){if(sequence===this.sequence){$('graph-status').textContent=this.data?'연결 확인 필요 · 마지막 조회 그래프를 표시하고 있습니다.':error.message||'그래프를 불러올 수 없습니다.';if(!this.data)this.draw();}}
+        }catch(error){if(sequence===this.sequence){this.error=this.data?'조회 연결 실패 · 마지막 조회 '+stamp.format(new Date(this.data.server_now))+'의 그래프를 표시합니다. 새로고침으로 다시 확인하세요.':'저장 이력을 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침해 주세요.';$('graph-status').textContent=this.data?'연결 확인 필요 · 마지막 조회 그래프를 표시하고 있습니다.':this.error;this.draw();}}
         finally{clearTimeout(timeout);if(sequence===this.sequence){this.pending=null;this.pendingKey=null;}}
       })();return this.pending;
     }
@@ -56,38 +79,55 @@
       const svg=$('trend-chart'),box=$('chart-wrap').getBoundingClientRect();
       const width=Math.max(320,box.width),height=Math.max(240,box.height),left=width<550?58:84,right=24,top=30,bottom=44;
       const plotW=width-left-right,plotH=height-top-bottom;
-      svg.setAttribute('viewBox',`0 0 ${width} ${height}`);svg.replaceChildren();
+      svg.setAttribute('viewBox',`0 0 ${width} ${height}`);svg.replaceChildren();$('quality-chart').replaceChildren();$('graph-tooltip').hidden=true;
       this.layout={width,height,left,top,plotW,plotH};
       const data=this.data,bars=data?.bars||[],valid=bars.filter(bar=>bar.count>0);
+      $('graph-data-notice').hidden=!this.error;$('graph-data-notice').textContent=this.error||'';
+      $('graph-measured').textContent=data?data.samples.toLocaleString('ko-KR'):'—';
+      $('graph-failed').textContent=data?data.invalid_samples.toLocaleString('ko-KR'):'—';
+      $('graph-missing').textContent=data?String(bars.filter(bar=>!bar.count&&!bar.invalid_count).length):'—';
+      $('graph-estimated').textContent=data?String((data.estimates||[]).length):'—';
+      $('axis-notice').textContent=(this.options.axis==='fixed'?`고정 범위 ${this.options.min}~${this.options.max}℃`:'자동 범위')+(this.options.reference?' · 참고선 켜짐':' · 참고선 꺼짐');
       const estimates=(data?.estimates||[]).filter(item=>Number.isFinite(item.value_c)&&Number.isFinite(item.based_on_value_c));
       const forecastValues=estimates.flatMap(item=>[item.value_c,item.based_on_value_c]);
       $('graph-low').textContent=valid.length?number(data.low)+' ℃':'—';$('graph-high').textContent=valid.length?number(data.high)+' ℃':'—';
-      $('graph-period').textContent=data?`${stamp.format(new Date(data.start))} – ${stamp.format(new Date(data.end))} · 한국시간`:'조회할 시간 범위를 선택하세요';
+      $('graph-period').textContent=data?`${stamp.format(new Date(data.start))} – ${stamp.format(new Date(data.end))} · 한국시간`:'조회 시간 확인 중';
       $('graph-empty').hidden=valid.length>0||estimates.length>0;
-      $('graph-empty').textContent=data?'저장된 정상 온도 기록이 없습니다. 수집 기록이 쌓이면 표시됩니다.':'저장된 온도 이력을 불러오세요.';
-      if(!bars.length){$('graph-detail').textContent='기본값 38도는 그래프 기록에 넣지 않습니다.';return;}
+      $('graph-empty').textContent=data?'저장된 정상 온도 기록이 없습니다. 수집 기록이 쌓이면 표시됩니다.':this.error||'저장된 온도 이력을 불러오는 중입니다.';
+      if(!bars.length){$('graph-detail').textContent=this.error?'기록을 다시 조회하려면 새로고침을 눌러 주세요.':'조회 중에는 이전 온도나 기본값으로 그래프를 만들지 않습니다.';return;}
 
-      const range=[...forecastValues,...(valid.length?[data.low,data.high]:[])];
+      const range=[...forecastValues,...(valid.length?[data.low,data.high]:[])];if(this.options.reference)range.push(this.options.target,this.options.low,this.options.high);
       const rawLow=range.length?Math.min(...range):0,rawHigh=range.length?Math.max(...range):100,pad=Math.max(1,(rawHigh-rawLow)*.12);
       const rough=(rawHigh-rawLow+pad*2)/4,power=10**Math.floor(Math.log10(rough)),step=([1,2,5,10].find(n=>n*power>=rough)||10)*power;
-      const min=Math.floor((rawLow-pad)/step)*step,max=Math.ceil((rawHigh+pad)/step)*step;
+      const min=this.options.axis==='fixed'?this.options.min:Math.floor((rawLow-pad)/step)*step,max=this.options.axis==='fixed'?this.options.max:Math.ceil((rawHigh+pad)/step)*step;
+      if(this.options.axis==='fixed'&&((valid.length&&(data.low<min||data.high>max))||forecastValues.some(value=>value<min||value>max)))$('axis-notice').textContent+=' · 범위 밖 온도 있음';
+      if(this.options.reference&&[this.options.target,this.options.low,this.options.high].some(value=>value<min||value>max))$('axis-notice').textContent+=' · 범위 밖 참고선 있음';
+      this.axis={min,max};
       const y=value=>top+(max-value)/(max-min)*plotH,x=index=>left+(index+.5)*plotW/bars.length;
       const grid=element('g',{'class':'chart-grid'});svg.append(grid);
-      for(let value=min;value<=max+step*.01;value+=step){const yy=y(value);grid.append(element('line',{x1:left,x2:width-right,y1:yy,y2:yy}),element('text',{x:left-12,y:yy+5,'text-anchor':'end'},number(value)));}
+      for(let i=0;i<=4;i++){const value=min+(max-min)*i/4,yy=y(value);grid.append(element('line',{x1:left,x2:width-right,y1:yy,y2:yy}),element('text',{x:left-12,y:yy+5,'text-anchor':'end'},number(value)));}
       grid.append(element('text',{x:left-12,y:16,'text-anchor':'end'},'℃'));
       const ticks=width<550?3:7;
       for(let i=0;i<ticks;i++){const index=Math.round(i*(bars.length-1)/(ticks-1)),xx=x(index);grid.append(element('text',{x:xx,y:height-12,'text-anchor':i===0?'start':i===ticks-1?'end':'middle'},clock.format(new Date(bars[index].time))));}
+      const defs=element('defs'),clip=element('clipPath',{id:'temperature-clip'});clip.append(element('rect',{x:left,y:top,width:plotW,height:plotH}));defs.append(clip);svg.append(defs);
+      const plot=element('g',{'clip-path':'url(#temperature-clip)'});svg.append(plot);
+      if(this.options.reference){const lowY=y(this.options.high),highY=y(this.options.low);
+        plot.append(element('rect',{x:left,y:lowY,width:plotW,height:highY-lowY,'class':'chart-reference-range'}));
+        plot.append(element('line',{x1:left,x2:width-right,y1:y(this.options.target),y2:y(this.options.target),'class':'chart-target'}));
+        plot.append(element('text',{x:width-right-6,y:y(this.options.target)-6,'text-anchor':'end','class':'reference-label'},'목표 '+number(this.options.target)+'℃'));
+        plot.append(element('text',{x:left+6,y:Math.max(top+16,lowY+16),'class':'reference-label'},'참고 '+number(this.options.low)+'~'+number(this.options.high)+'℃'));
+      }
       let path='',previous=-2;
       bars.forEach((bar,i)=>{if(!bar.count)return;path+=(previous===i-1?'L':'M')+x(i).toFixed(2)+','+y(bar.close).toFixed(2);previous=i;});
-      svg.append(element('path',{d:path,'class':'chart-close'}));
-      const candles=element('g',{'class':'candles'});svg.append(candles);
+      plot.append(element('path',{d:path,'class':'chart-close'}));
+      const candles=element('g',{'class':'candles'});plot.append(candles);
       bars.forEach((bar,i)=>{
-        const xx=x(i);if(!bar.count){if(bar.invalid_count)candles.append(element('circle',{cx:xx,cy:top+plotH-5,r:2,'class':'chart-failed'}));return;}
+        const xx=x(i);if(!bar.count)return;
         const tone=bar.close>bar.open?'up':bar.close<bar.open?'down':'flat',w=Math.max(.8,Math.min(22,plotW/bars.length*.64));
         candles.append(element('line',{x1:xx,x2:xx,y1:y(bar.high),y2:y(bar.low),'class':`wick ${tone}`}));
         candles.append(element('rect',{x:xx-w/2,y:Math.min(y(bar.open),y(bar.close))-.6,width:w,height:Math.max(1.2,Math.abs(y(bar.open)-y(bar.close))),'class':`candle ${tone}${bar.complete?'':' forming'}`}));
       });
-      const forecast=element('g',{'class':'estimates'});svg.append(forecast);
+      const forecast=element('g',{'class':'estimates'});plot.append(forecast);
       const timeX=time=>left+(Date.parse(time)-Date.parse(data.start))/(Date.parse(data.end)-Date.parse(data.start))*plotW;
       for(const item of estimates){const x1=Math.max(left,timeX(item.based_on_at)),x2=Math.min(width-right,timeX(item.estimated_at));
         const anchor=Date.parse(item.based_on_at),target=Date.parse(item.estimated_at),clipped=Math.max(anchor,Date.parse(data.start));
@@ -96,6 +136,13 @@
       this.cross=element('line',{x1:0,x2:0,y1:top,y2:top+plotH,'class':'chart-cross',visibility:'hidden'});svg.append(this.cross);
       $('graph-detail').textContent='봉을 누르거나 좌우 방향키로 첫값·최고·최저·마지막 온도를 확인하세요. 빈 구간은 기록 없음입니다.';
       if(estimates.length)$('graph-detail').textContent+=' 주황 점선·빈 원은 추정값이며 정상 봉·최저/최고 통계에 포함하지 않습니다.';
+      const quality=$('quality-chart');quality.setAttribute('viewBox',`0 0 ${width} 18`);
+      bars.forEach((bar,i)=>{const state=bar.count?(bar.invalid_count?'mixed':'good'):bar.invalid_count?'failed':'missing';
+        const rect=element('rect',{x:left+i*plotW/bars.length,y:2,width:Math.max(.1,plotW/bars.length-.4),height:14,'class':'quality-'+state});
+        rect.append(element('title',{},`${stamp.format(new Date(bar.time))} · 실측 ${bar.count}건 · 실패 ${bar.invalid_count}건`));quality.append(rect);
+      });
+      for(const item of estimates){const cx=timeX(item.estimated_at);quality.append(element('circle',{cx,cy:9,r:3.5,'class':'quality-estimated'}));}
+      quality.onclick=event=>this.pick(event);
       if(this.selected>=0)this.detail();
     }
     pick(event){
@@ -110,6 +157,12 @@
       const estimates=(this.data.estimates||[]).filter(item=>Date.parse(item.estimated_at)>=Date.parse(bar.time)&&Date.parse(item.estimated_at)<Date.parse(bar.time)+this.minutes*60000);
       $('graph-detail').textContent=bar.count?`${time} · 첫값 ${number(bar.open)} · 최고 ${number(bar.high)} · 최저 ${number(bar.low)} · 마지막 ${number(bar.close)} ℃ · 정상 ${bar.count}건 / 실패 ${bar.invalid_count}건${bar.complete?'':' · 진행 중인 봉'}`:`${time} · ${bar.invalid_count?'정상 판독 없음 / 실패 '+bar.invalid_count+'건':'저장 기록 없음'}`;
       if(estimates.length)$('graph-detail').textContent+=' · 추정 '+estimates.map(item=>'약 '+number(item.value_c)+' ℃').join(', ')+' (실측 아님·정상 통계 제외)';
+      const tip=$('graph-tooltip');tip.textContent=$('graph-detail').textContent;tip.hidden=false;
+      const tipWidth=Math.min(330,this.layout.width-24);tip.style.width=tipWidth+'px';
+      tip.style.left=Math.max(12,Math.min(this.layout.width-tipWidth-12,x-tipWidth/2))+'px';
+      const valueY=bar.count?this.layout.top+(this.axis.max-bar.close)/(this.axis.max-this.axis.min)*this.layout.plotH:this.layout.top+this.layout.plotH/2;
+      tip.style.top=Math.max(12,Math.min(this.layout.height-tip.offsetHeight-12,valueY+12))+'px';
+
     }
   }
   globalThis.TC06Graph={Graph};

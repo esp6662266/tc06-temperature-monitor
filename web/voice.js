@@ -2,12 +2,12 @@
 // Fixed Korean female recordings, composed in Web Audio. No OS speech voices,
 // external TTS service, per-temperature audio file or uploaded speech is used.
 (() => {
-  const KEYS = ['intro','minus','0','1','2','3','4','5','6','7','8','9','10','100','1000','point','end'];
-  function temperatureTokens(value) {
+  const KEYS = ['intro','fallback','minus','0','1','2','3','4','5','6','7','8','9','10','100','1000','point','end'];
+  function temperatureTokens(value, kind = 'good') {
     if (!Number.isFinite(value) || Math.abs(value) > 9999.9) throw Error('온도 범위를 확인하세요');
     const tenths = Math.round(Math.abs(value) * 10);
     let integer = Math.floor(tenths / 10);
-    const tokens = ['intro'];
+    const tokens = [kind === 'fallback' ? 'fallback' : 'intro'];
     if (value < 0 && tenths) tokens.push('minus');
     if (!integer) tokens.push('0');
     for (const place of [1000,100,10,1]) {
@@ -60,9 +60,9 @@
       for (const source of this.sources) { try { source.stop(); source.disconnect(); } catch {} }
       this.sources = [];
     }
-    async say(value, volume = 0.8) {
+    async say(value, volume = 0.8, kind = 'good') {
       this.cancel(); const generation = this.generation;
-      const tokens = temperatureTokens(value);
+      const tokens = temperatureTokens(value, kind);
       await this.unlock(volume);
       if (generation !== this.generation) return false;
       let at = this.context.currentTime + 0.06;

@@ -22,3 +22,5 @@ test('all fixed MP3 fragments exist, match manifest and remain below 100 KB tota
  let bytes=0;for(const key of keys){const file=await readFile(`web/voice/${key}.mp3`);assert.ok(file.length>100);bytes+=file.length;}
  assert.equal(bytes,manifest.bytes);assert.ok(bytes<100000);assert.equal(manifest.gender,'female');
 });
+
+test('fallback phrase replaces the current-temperature introduction',()=>{assert.deepEqual(temperatureTokens(38,'fallback'),['fallback','3','10','8','end']);assert.deepEqual(temperatureTokens(38),['intro','3','10','8','end']);});

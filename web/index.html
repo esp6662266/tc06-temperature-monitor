@@ -5,34 +5,49 @@
   <meta name="theme-color" content="#000000"><title>TC-06 · 현장 온도</title>
   <link rel="stylesheet" href="/style.css"><script defer src="/voice.js"></script><script defer src="/graph.js"></script><script defer src="/app.js"></script>
 </head>
-<body data-mode="display">
+<body data-mode="display" data-state="loading">
   <main>
-    <header><div class="brand"><span class="mark">T</span><span>현장 온도 모니터</span></div><span id="connection" class="badge">연결 확인 중</span></header>
+    <header><div class="brand"><span class="mark">T</span><span>현장 온도 모니터</span></div><span id="connection" class="badge">서버 확인 중</span></header>
     <section id="monitor-panel" aria-labelledby="asset-title">
-      <div class="heading"><div><span class="eyebrow">DECOATER · 온도 감시</span><h1 id="asset-title">TC-06</h1></div><span id="quality" class="badge">기본값 · 38도</span></div>
-      <div class="temperature"><span id="temperature">38</span><span class="unit">℃</span></div>
-      <p id="status" role="status">기본값 38도를 표시합니다.</p>
+      <div class="heading"><div><span class="eyebrow">DECOATER · 온도 감시</span><h1 id="asset-title">TC-06</h1></div><span id="quality" class="badge">불러오는 중</span></div>
+      <div class="temperature"><span id="temperature">—</span><span class="unit">℃</span></div>
+      <p id="reading-age" class="reading-age">마지막 실측 확인 중</p><p id="status" role="status">온도를 불러오는 중입니다.</p>
       <div class="metadata"><div><span>마지막 판독</span><strong id="captured">—</strong></div><div><span>서버 저장</span><strong id="received">—</strong></div><div><span>다음 음성 안내</span><strong id="countdown">꺼짐</strong></div></div>
-      <div class="controls"><button id="speech-start">음성 안내 시작</button><button id="speech-stop" class="secondary" disabled>안내 중지</button><button id="display-mode" class="secondary">숫자 디스플레이</button><button id="graph-mode" class="secondary">온도 그래프</button><button id="fullscreen" class="secondary">전체 화면</button></div>
+      <div class="controls"><button id="speech-start">음성 안내 시작</button><button id="speech-stop" class="secondary" disabled>안내 중지</button><button id="display-mode" class="secondary">숫자 화면</button><button id="graph-mode" class="secondary">온도 그래프</button><button id="settings-open" class="secondary" aria-controls="settings-panel" aria-expanded="false">설정</button><button id="fullscreen" class="secondary">전체 화면</button></div>
       <p id="audio-status" class="note" role="status">음성 안내 시작을 누르면 웹 숫자 TTS가 1분마다 안내합니다. 운영체제의 한국어 음성 설치는 필요 없습니다.</p>
-      <section class="settings" aria-label="표시 및 음성 설정"><h2>화면 · 음성 설정</h2><div class="settings-grid">
+      <details id="settings-panel" class="settings"><summary>화면 · 음성 설정</summary><p class="note">이 브라우저에 저장됩니다. 색상과 숫자 크기는 숫자 전용 화면에 적용됩니다.</p><div class="settings-grid">
         <label>음량<input id="volume" aria-label="음량" type="range" min="0" max="1" value="0.8" step="0.05"></label>
         <label>음성 반복 간격<select id="interval"><option value="60">1분</option><option value="120">2분</option><option value="300">5분</option></select></label>
-        <label>디스플레이 색상 조합<select id="color"><option value="white">검정 바탕 · 흰 숫자</option><option value="amber">검정 바탕 · 노란 숫자 ★ 추천</option><option value="mint">검정 바탕 · 민트 숫자</option><option value="cyan">검정 바탕 · 하늘 숫자</option><option value="orange">검정 바탕 · 주황 숫자</option><option value="navy">남색 바탕 · 흰 숫자</option><option value="yellow">노랑 바탕 · 검정 숫자</option><option value="custom">검정 바탕 · 직접 선택</option></select><input id="custom-color" type="color" aria-label="직접 숫자 색상 선택" value="#ffffff"><span class="color-preview" aria-hidden="true">38</span></label>
-        <label>디스플레이 숫자 크기<input id="size" aria-label="숫자 크기" type="range" min="50" max="100" value="90" step="5"></label>
-      </div><h3>현장 추천 색상 7가지</h3><div id="palettes" class="palettes" role="group" aria-label="추천 색상 조합"></div><p class="note">설정은 이 브라우저에 저장됩니다. 짧은 OCR 실패는 안정적인 최근 정상값 3~5개로 최대 2분까지 추정하며 ≈ 기호와 추정값 문구를 표시합니다. 조건이 안 맞거나 2분이 지나면 마지막 정상 온도와 지난 시간을 표시합니다. 과거 값을 현재 온도로 읽지 않도록 음성은 대기하고, 정상 수신이 재개되면 자동 복귀합니다. 정상 수신 이력이 없을 때만 기본값 38도를 사용합니다. 실측 봉과 통계는 유지하며, 추정값은 별도 점선으로 표시합니다.</p><p class="note">디스플레이에서 화면을 누르거나 리모컨 Enter를 누르면 메뉴가 나옵니다. Esc 또는 ‘일반 화면’을 누르면 돌아옵니다. 전체 화면과 음성은 브라우저에서 처음 한 번 조작이 필요할 수 있습니다.</p></section>
+        <label>숫자 화면 색상 조합<select id="color"><option value="white">검정 바탕 · 흰 숫자</option><option value="amber">검정 바탕 · 노란 숫자 ★ 추천</option><option value="mint">검정 바탕 · 민트 숫자</option><option value="cyan">검정 바탕 · 하늘 숫자</option><option value="orange">검정 바탕 · 주황 숫자</option><option value="navy">남색 바탕 · 흰 숫자</option><option value="yellow">노랑 바탕 · 검정 숫자</option><option value="custom">검정 바탕 · 직접 선택</option></select><input id="custom-color" type="color" aria-label="직접 숫자 색상 선택" value="#ffffff"><span class="color-preview" aria-hidden="true">123.4</span><small>색상 미리보기 · 예시 숫자</small></label>
+        <label>숫자 화면 숫자 크기<input id="size" aria-label="숫자 크기" type="range" min="50" max="100" value="90" step="5"></label>
+      </div></details>
+      <details id="policy-panel"><summary>표시 정책 · 사용 안내</summary><p class="note">실측값은 최근 수신한 실제 판독값입니다. 짧은 OCR 실패는 안정적인 최근 실측 3~5개로 마지막 실측 후 최대 2분까지만 추정하며 ≈ 표시를 붙입니다. 추정 조건이 맞지 않거나 시간이 지나면 마지막 정상값과 경과 시간을 표시합니다. 추정·과거 값은 현재 온도로 읽지 않도록 음성 안내가 대기합니다. 보관된 실측 이력이 없을 때만 기본 표시값 38도를 사용하며 음성에서도 기본값임을 먼저 알립니다.</p><p class="note">실측·실패 원본 기록과 CSV는 유지합니다. 추정은 실측 봉·최저/최고 통계에 포함하지 않습니다. 숫자 화면은 터치·Enter로 메뉴를 열고 Esc로 일반 화면으로 돌아옵니다. 음성과 전체 화면은 처음 한 번 조작이 필요합니다.</p></details>
       <p id="retention-status" class="note">최근 30일 보관 (한국날짜 기준) · 매시 15분 자동 삭제 · 서버에는 온도 텍스트만 저장</p><details><summary>기록 다운로드</summary><div class="history"><label>기록 일자 (한국시간)<input id="history-day" type="date"></label><button id="download" class="secondary">CSV 다운로드</button></div><p class="note">영상에서 읽은 참고 표시값입니다. 운전·보호 판단은 기존 HMI에서 확인하세요.</p></details>
     </section>
-    <footer><a href="/updates.html">수집기 업데이트</a><span>1분 간격 저장 · 한국시간 표시</span><span id="updated">아직 수신한 값이 없습니다</span></footer>
+    <footer><a href="/updates.html">수집기 업데이트</a><span>1분 간격 저장 · 한국시간 표시</span><span id="updated">첫 조회 대기</span></footer>
   </main>
   <section id="graph-screen" aria-label="TC-06 온도 추이 그래프" hidden>
-    <header class="graph-header"><div><span id="graph-reading-label" class="eyebrow">TC-06 · 현재 온도</span><div class="graph-reading"><strong id="graph-temperature">38</strong><span>℃</span><span id="graph-quality" class="badge">기본값 · 38도</span></div><p id="graph-current-status" class="note">수신 상태 확인 중</p></div><div class="graph-navigation"><button id="graph-to-display" class="secondary">숫자 화면</button><button id="graph-to-normal" class="secondary">일반 화면</button><button id="graph-speech" class="secondary">음성 시작</button><button id="graph-fullscreen">전체 화면</button></div></header>
+    <header class="graph-header"><div><span id="graph-reading-label" class="eyebrow">TC-06 · 온도 확인 중</span><div class="graph-reading"><strong id="graph-temperature">—</strong><span>℃</span><span id="graph-quality" class="badge">불러오는 중</span></div><p id="graph-current-status" class="note">수신 상태 확인 중</p></div><div class="graph-navigation"><button id="graph-to-display" class="secondary">숫자 화면</button><button id="graph-to-normal" class="secondary">일반 화면</button><button id="graph-settings" class="secondary">설정</button><button id="graph-speech" class="secondary">음성 시작</button><button id="graph-fullscreen">전체 화면</button></div></header>
     <div class="graph-toolbar"><div class="graph-intervals" role="group" aria-label="봉 간격"><button data-minutes="1" aria-pressed="true">1분봉</button><button data-minutes="5" aria-pressed="false">5분봉</button><button data-minutes="10" aria-pressed="false">10분봉</button></div><label>조회 범위<select id="graph-span"><option value="60">최근 1시간</option><option value="360" selected>최근 6시간</option><option value="1440">최근 24시간</option></select></label><label>기준 날짜<input id="graph-day" type="date"></label><button id="graph-live" class="secondary">오늘</button><button id="graph-refresh" class="secondary">새로고침</button></div>
-    <div class="graph-summary"><span id="graph-period">한국시간</span><span>실측 최저 <strong id="graph-low">—</strong> · 최고 <strong id="graph-high">—</strong></span><span class="chart-legend"><i class="legend-up"></i>상승 <i class="legend-down"></i>하락 <i class="legend-flat"></i>동일 <i class="legend-estimate"></i>점선·빈 원: 추정 · 세로축 자동 범위</span></div>
-    <div id="chart-wrap"><svg id="trend-chart" role="img" aria-label="TC-06 온도 봉 그래프. 좌우 방향키로 봉 상세를 확인할 수 있습니다." tabindex="0"></svg><p id="graph-empty">저장된 온도 이력을 불러오세요.</p></div>
-    <div id="graph-detail" aria-live="polite">기본값 38도는 그래프 기록에 넣지 않습니다.</div><p id="graph-status" role="status">저장 이력 대기 · 기본값 38도는 그래프에 넣지 않습니다.</p>
+    <p id="graph-data-notice" role="status" hidden></p>
+    <div class="graph-counts" aria-label="조회 구간 집계"><div><span>실측 기록</span><strong id="graph-measured">—</strong><small>건</small></div><div><span>판독 실패 기록</span><strong id="graph-failed">—</strong><small>건</small></div><div><span>기록 없는 구간</span><strong id="graph-missing">—</strong><small>구간</small></div><div><span>추정 표시</span><strong id="graph-estimated">—</strong><small>건</small></div></div>
+    <p class="graph-count-note">조회 구간의 저장 기록 집계입니다. 실패 기록 수는 OCR 재시도 횟수나 오독률이 아닙니다.</p>
+    <details id="graph-options"><summary>세로축 · 참고 온도 설정 <span id="axis-notice">자동 범위 · 참고선 꺼짐</span></summary>
+      <form id="graph-options-form"><div class="graph-option-grid">
+      <label>세로축<select id="axis-mode"><option value="auto">자동 범위</option><option value="fixed">고정 범위</option></select></label>
+      <label>축 최솟값 (℃)<input id="axis-min" type="number" step="0.1" min="-9999.9" max="9999.9"></label><label>축 최댓값 (℃)<input id="axis-max" type="number" step="0.1" min="-9999.9" max="9999.9"></label>
+      <label class="check-label"><input id="reference-enabled" type="checkbox">목표 · 참고 범위 표시</label>
+      <label>목표 온도 (℃)<input id="target-value" type="number" step="0.1" min="-9999.9" max="9999.9"></label><label>참고 범위 하한 (℃)<input id="reference-min" type="number" step="0.1" min="-9999.9" max="9999.9"></label><label>참고 범위 상한 (℃)<input id="reference-max" type="number" step="0.1" min="-9999.9" max="9999.9"></label>
+      </div><p class="note">이 브라우저의 그래프에만 적용됩니다. 참고선은 설비의 운전·보호 설정을 바꾸지 않습니다.</p><p id="graph-options-error" role="alert"></p><button id="graph-options-save">설정 적용</button></form>
+    </details>
+    <div class="graph-summary"><span id="graph-period">한국시간</span><span>실측 최저 <strong id="graph-low">—</strong> · 최고 <strong id="graph-high">—</strong></span><span class="chart-legend"><i class="legend-up"></i>상승 <i class="legend-down"></i>하락 <i class="legend-flat"></i>동일 <i class="legend-estimate"></i>점선·빈 원: 추정</span></div>
+    <div id="chart-wrap"><svg id="trend-chart" role="img" aria-label="TC-06 온도 봉 그래프. 좌우 방향키로 봉 상세를 확인할 수 있습니다." tabindex="0"></svg><div id="graph-tooltip" role="tooltip" hidden></div><p id="graph-empty">저장된 온도 이력을 불러오는 중입니다.</p></div>
+    <div class="quality-header"><strong>판독 상태</strong><span>실측 <i class="quality-key good"></i> · 실패 <i class="quality-key failed"></i> · 혼합 <i class="quality-key mixed"></i> · 기록 없음 <i class="quality-key missing"></i> · 추정 <i class="quality-key estimated"></i></span></div>
+    <svg id="quality-chart" role="img" aria-label="온도 축과 분리한 판독 상태. 그래프와 같은 시간 구간입니다."></svg>
+    <div id="graph-detail" aria-live="polite">그래프를 누르거나 좌우 방향키로 상세를 확인하세요.</div><p id="graph-status" role="status">저장 이력 대기 · 기본값 38도는 그래프에 넣지 않습니다.</p>
   </section>
-  <nav id="display-menu" aria-label="디스플레이 메뉴" hidden><button id="normal-mode">일반 화면</button><button id="display-to-graph" class="secondary">그래프</button><button id="display-speech" class="secondary">음성 시작</button><button id="display-fullscreen" class="secondary">전체 화면</button></nav>
+  <nav id="display-menu" aria-label="디스플레이 메뉴" hidden><button id="normal-mode">일반 화면</button><button id="display-settings" class="secondary">설정</button><button id="display-to-graph" class="secondary">그래프</button><button id="display-speech" class="secondary">음성 시작</button><button id="display-fullscreen" class="secondary">전체 화면</button></nav>
+  <p id="display-state" role="status">불러오는 중</p>
   <p id="display-held" role="status" hidden></p>
 </body>
 </html>

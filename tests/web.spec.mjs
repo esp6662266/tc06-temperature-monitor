@@ -6,7 +6,7 @@ function sample(extra={}) {const at=new Date().toISOString();return {record:{id:
 test('normal screen retains the last normal reading during stale, invalid and offline states',async({page})=>{
   let body=sample(),offline=false;
   await page.route('**/api/latest',route=>offline?route.abort():route.fulfill({json:body}));
-  await page.goto('/?mode=normal');await expect(page.locator('#temperature')).toHaveText('123.4');await expect(page.locator('#quality')).toHaveText('실제 수신값');
+  await page.goto('/?mode=normal');await expect(page.locator('#temperature')).toHaveText('123.4');await expect(page.locator('#quality')).toHaveText('실측값');
   body=sample({captured_at:new Date(Date.now()-200000).toISOString()});await page.evaluate(()=>refresh());
   await expect(page.locator('#temperature')).toHaveText('123.4');await expect(page.locator('#quality')).toContainText('마지막 정상값');
   body=sample({status:'ocr_failed',value_c:null});await page.evaluate(()=>refresh());await expect(page.locator('#status')).toContainText('판독할 수 없습니다');
@@ -40,17 +40,17 @@ test('number voice works without OS speech synthesis or server audio requests',a
   expect(await page.evaluate(()=>voice.context.state)).toBe('running');expect(audioRequests).toEqual([]);
 });
 test('TV display preferences persist after reload',async({page})=>{
-  await page.goto('/?mode=normal');await page.locator('#color').selectOption('amber');await page.locator('#interval').selectOption('120');await page.locator('#volume').fill('0.4');await page.reload();
+  await page.goto('/?mode=normal');await page.locator('#settings-open').click();await page.locator('#color').selectOption('amber');await page.locator('#interval').selectOption('120');await page.locator('#volume').fill('0.4');await page.reload();
   await expect(page.locator('#color')).toHaveValue('amber');await expect(page.locator('#interval')).toHaveValue('120');await expect(page.locator('#volume')).toHaveValue('0.4');await page.keyboard.press('Escape');await page.locator('#display-mode').click();await expect(page.locator('body')).toHaveAttribute('data-mode','display');expect(await page.locator('#temperature').evaluate(el=>getComputedStyle(el).color)).toBe('rgb(255, 230, 0)');
 });
 test('cached page reloads offline and composes the fixed 38 voice in Web Audio',async({browser})=>{
   const context=await browser.newContext({serviceWorkers:'allow'});const page=await context.newPage();await page.route('**/api/latest',route=>route.fulfill({json:{record:null,last_good:null,server_now:new Date().toISOString()}}));await page.goto('http://127.0.0.1:8766/?mode=normal');
   await page.evaluate(async()=>{await navigator.serviceWorker.ready;if(!navigator.serviceWorker.controller)await new Promise(resolve=>navigator.serviceWorker.addEventListener('controllerchange',resolve,{once:true}));});
   await context.setOffline(true);await page.reload();await expect(page.locator('#temperature')).toHaveText('38');await page.locator('#speech-start').click();
-  await expect.poll(()=>page.evaluate(()=>voice.lastValue)).toBe(38);expect(await page.evaluate(()=>voice.buffers.size)).toBe(17);
-  expect(await page.evaluate(()=>voice.lastTokens)).toEqual(['intro','3','10','8','end']);await expect.poll(()=>page.evaluate(()=>voice.context.currentTime)).toBeGreaterThan(0);
+  await expect.poll(()=>page.evaluate(()=>voice.lastValue)).toBe(38);expect(await page.evaluate(()=>voice.buffers.size)).toBe(18);
+  expect(await page.evaluate(()=>voice.lastTokens)).toEqual(['fallback','3','10','8','end']);await expect.poll(()=>page.evaluate(()=>voice.context.currentTime)).toBeGreaterThan(0);
   expect(await page.evaluate(()=>Array.from(voice.buffers.get('intro').getChannelData(0)).some(x=>Math.abs(x)>0.01))).toBe(true);
-  await expect(page.locator('#audio-status')).toContainText('기본값 38도');await context.close();
+  await expect(page.locator('#audio-status')).toContainText('기본 표시값 38도');await context.close();
 });
 
 test('fullscreen from normal mode leaves only the large temperature',async({page})=>{
@@ -59,14 +59,14 @@ test('fullscreen from normal mode leaves only the large temperature',async({page
 });
 
 test('custom number color updates immediately and survives reload',async({page})=>{
- await page.goto('/?mode=normal');await page.locator('#custom-color').fill('#26a9e0');await expect(page.locator('#color')).toHaveValue('custom');expect(await page.locator('.color-preview').evaluate(el=>getComputedStyle(el).color)).toBe('rgb(38, 169, 224)');
+ await page.goto('/?mode=normal');await page.locator('#settings-open').click();await page.locator('#color').selectOption('custom');await page.locator('#custom-color').fill('#26a9e0');await expect(page.locator('#color')).toHaveValue('custom');expect(await page.locator('.color-preview').evaluate(el=>getComputedStyle(el).color)).toBe('rgb(38, 169, 224)');
  await page.reload();await expect(page.locator('#custom-color')).toHaveValue('#26a9e0');await page.locator('#display-mode').click();expect(await page.locator('#temperature').evaluate(el=>getComputedStyle(el).color)).toBe('rgb(38, 169, 224)');
 });
 
-test('seven contrasting palettes change both display background and number color',async({page})=>{
- await page.goto('/?mode=normal');await expect(page.locator('#palettes button')).toHaveCount(7);await page.locator('[data-palette=yellow]').click();await page.locator('#display-mode').click();
+test('seven contrast palettes remain available in one selector and persist',async({page})=>{
+ await page.route('**/api/latest',r=>r.fulfill({json:sample()}));await page.goto('/?mode=normal');await page.locator('#settings-open').click();await expect(page.locator('#color option')).toHaveCount(8);await expect(page.locator('#palettes')).toHaveCount(0);await page.locator('#color').selectOption('yellow');await page.locator('#display-mode').click();
  expect(await page.locator('#temperature').evaluate(el=>getComputedStyle(el).color)).toBe('rgb(0, 0, 0)');expect(await page.locator('#monitor-panel').evaluate(el=>getComputedStyle(el).backgroundColor)).toBe('rgb(255, 230, 0)');
- await page.keyboard.press('Escape');await page.locator('[data-palette=navy]').click();await page.reload();await expect(page.locator('#color')).toHaveValue('navy');
+ await page.keyboard.press('Escape');await page.locator('#color').selectOption('navy');await page.reload();await expect(page.locator('#color')).toHaveValue('navy');
 });
 
 function trendSample(minutes=1,empty=false){
@@ -84,7 +84,7 @@ test('graph mode keeps current temperature visible while switching 1, 5 and 10-m
 });
 test('empty graph never invents a 38-degree history candle',async({page})=>{
  await page.route('**/api/latest',route=>route.fulfill({json:{record:null,server_now:new Date().toISOString()}}));await page.route('**/api/trend**',route=>route.fulfill({json:trendSample(5,true)}));
- await page.goto('/?mode=graph&minutes=5');await expect(page.locator('#graph-temperature')).toHaveText('38');await expect(page.locator('#graph-quality')).toContainText('기본값');await expect(page.locator('#graph-empty')).toBeVisible();await expect(page.locator('.candle')).toHaveCount(0);await expect(page.locator('#graph-low')).toHaveText('—');
+ await page.goto('/?mode=graph&minutes=5');await expect(page.locator('#graph-temperature')).toHaveText('38');await expect(page.locator('#graph-quality')).toContainText('기본 표시값');await expect(page.locator('#graph-empty')).toBeVisible();await expect(page.locator('.candle')).toHaveCount(0);await expect(page.locator('#graph-low')).toHaveText('—');
 });
 test('graph refreshes each minute and preserves labelled historical data on connection failure',async({page})=>{
  let offline=false,version=0;await page.route('**/api/latest',route=>offline?route.abort():route.fulfill({json:sample()}));
@@ -131,7 +131,7 @@ test('expired and future cache entries never become held temperatures',async({pa
  const now=Date.now(),old=sample({captured_at:new Date(now-31*86400000).toISOString()}).record;
  await page.addInitScript(record=>localStorage.setItem('tc06-last-good-v1',JSON.stringify(location.search.includes('future')?{...record,captured_at:new Date(Date.now()+86400000).toISOString()}:record)),old);
  await page.route('**/api/latest',route=>route.fulfill({json:{record:null,last_good:old,server_now:new Date(now).toISOString()}}));
- await page.goto('/?mode=display');await expect(page.locator('#temperature')).toHaveText('38');await expect(page.locator('#display-held')).toBeHidden();
+ await page.goto('/?mode=display');await expect(page.locator('#temperature')).toHaveText('38');await expect(page.locator('#display-held')).toContainText('수신 이력 없음');
  await page.goto('/?mode=display&future=1');await expect(page.locator('#temperature')).toHaveText('38');
 });
 test('held numeric display keeps both number and age within TV and narrow screens',async({page})=>{
@@ -208,4 +208,61 @@ test('update screen fits a phone and disables apply for offline or same-version 
  await expect(page.getByRole('button',{name:'업데이트 적용',exact:true})).toBeDisabled();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.screenshot({path:'test-results/update-mobile.png',fullPage:true});
+});
+
+test('first lookup stays loading in every mode without a false outage or fallback',async({page})=>{
+ let release;const gate=new Promise(resolve=>release=resolve);
+ await page.route('**/api/latest',async route=>{await gate;return route.fulfill({json:sample()});});
+ await page.goto('/?mode=normal');await expect(page.locator('#temperature')).toHaveText('—');await expect(page.locator('#connection')).toHaveText('서버 확인 중');
+ await expect(page.locator('#status')).toContainText('불러오는 중');await page.locator('#graph-mode').click();await expect(page.locator('#graph-quality')).toHaveText('불러오는 중');
+ await page.locator('#graph-to-display').click();await expect(page.locator('#display-state')).toContainText('불러오는 중');release();await expect(page.locator('#temperature')).toHaveText('123.4');await expect(page.locator('#display-state')).toContainText('실측값');
+});
+test('fallback voice explicitly describes a default rather than a current measurement',async({page})=>{
+ await page.route('**/api/latest',r=>r.fulfill({json:{record:null,server_now:new Date().toISOString()}}));
+ await page.goto('/?mode=normal');await expect(page.locator('#quality')).toHaveText('기본 표시값 · 실측 아님');await page.locator('#speech-start').click();
+ await expect.poll(()=>page.evaluate(()=>voice.lastTokens)).toEqual(['fallback','3','10','8','end']);await expect(page.locator('#audio-status')).toContainText('기본 표시값 38도');
+});
+test('setup is collapsed and only the custom palette reveals a colour picker',async({page})=>{
+ await page.goto('/?mode=normal');await expect(page.locator('#color')).toBeHidden();await page.locator('#settings-open').click();await expect(page.locator('#color')).toBeVisible();
+ await expect(page.locator('#custom-color')).toBeHidden();await page.locator('#color').selectOption('custom');await expect(page.locator('#custom-color')).toBeVisible();await page.locator('#custom-color').fill('#26a9e0');
+ await page.reload();await page.locator('#settings-open').click();await expect(page.locator('#color')).toHaveValue('custom');await expect(page.locator('#custom-color')).toHaveValue('#26a9e0');
+});
+test('failed and missing graph periods occupy a separate quality strip and estimates stay distinct',async({page})=>{
+ const data=trendSample();data.bars[0]={...data.bars[0],count:0,invalid_count:2,open:null,close:null,high:null,low:null};data.bars[1]={...data.bars[0],time:data.bars[1].time,invalid_count:0};data.bars[2].invalid_count=1;data.samples=58;data.invalid_samples=3;
+ data.estimates=[{estimated:true,value_c:130,based_on_value_c:125,based_on_at:data.bars[2].time,estimated_at:data.bars[3].time}];
+ await page.route('**/api/latest',r=>r.fulfill({json:sample()}));await page.route('**/api/trend**',r=>r.fulfill({json:data}));await page.goto('/?mode=graph');
+ await expect(page.locator('#graph-measured')).toHaveText('58');await expect(page.locator('#graph-failed')).toHaveText('3');await expect(page.locator('#graph-missing')).toHaveText('1');await expect(page.locator('#graph-estimated')).toHaveText('1');
+ await expect(page.locator('#trend-chart .chart-failed')).toHaveCount(0);await expect(page.locator('#quality-chart .quality-failed')).toHaveCount(1);await expect(page.locator('#quality-chart .quality-mixed')).toHaveCount(1);await expect(page.locator('#quality-chart .quality-estimated')).toHaveCount(1);
+ await page.locator('#trend-chart').press('Home');await expect(page.locator('#graph-tooltip')).toContainText('실패 2건');await expect(page.locator('#graph-low')).toHaveText(data.low.toFixed(1)+' ℃');
+});
+test('fixed graph axes and optional references validate, persist and never change measured statistics',async({page})=>{
+ await page.route('**/api/latest',r=>r.fulfill({json:sample()}));await page.route('**/api/trend**',r=>r.fulfill({json:trendSample()}));await page.goto('/?mode=graph');await page.locator('#graph-options summary').click();
+ await page.locator('#axis-mode').selectOption('fixed');await page.locator('#axis-min').fill('100');await page.locator('#axis-max').fill('140');await page.locator('#reference-enabled').check();await page.locator('#target-value').fill('120');await page.locator('#reference-min').fill('115');await page.locator('#reference-max').fill('125');await page.locator('#graph-options-save').click();
+ await expect(page.locator('.chart-target')).toHaveCount(1);await expect(page.locator('.chart-reference-range')).toHaveCount(1);await expect(page.locator('#axis-notice')).toContainText('고정 범위');
+ const high=await page.locator('#graph-high').textContent();await page.locator('#axis-max').fill('90');await page.locator('#graph-options-save').click();await expect(page.locator('#graph-options-error')).toContainText('최솟값');await expect(page.locator('#graph-high')).toHaveText(high);
+ await page.reload();await page.locator('#graph-options summary').click();await expect(page.locator('#axis-mode')).toHaveValue('fixed');await expect(page.locator('#axis-max')).toHaveValue('140');await expect(page.locator('#target-value')).toHaveValue('120');await expect(page.locator('.chart-target')).toHaveCount(1);
+});
+
+test('actual capture age advances in all modes without changing stored capture time',async({page})=>{
+ const now=Date.now(),captured=new Date(now-23000).toISOString();await page.clock.install({time:now});await page.route('**/api/latest',r=>r.fulfill({json:{...sample({captured_at:captured}),server_now:new Date(now).toISOString()}}));
+ await page.goto('/?mode=normal');await expect(page.locator('#reading-age')).toHaveText('마지막 실측 23초 전');await page.locator('#graph-mode').click();await expect(page.locator('#graph-current-status')).toContainText('마지막 실측 23초 전');await page.locator('#graph-to-display').click();await page.clock.fastForward(10000);await expect(page.locator('#display-state')).toContainText('마지막 실측 33초 전');expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('tc06-last-good-v1')).captured_at)).toBe(captured);
+});
+test('invalid saved graph options recover to automatic axis and fixed clipping is disclosed',async({page})=>{
+ await page.addInitScript(()=>localStorage.setItem('tc06-graph-view-v1',JSON.stringify({axis:'fixed',min:200,max:100,reference:true,target:'bad'})));
+ const data=trendSample();data.high=900;data.bars[0].high=900;
+ await page.route('**/api/latest',r=>r.fulfill({json:sample()}));await page.route('**/api/trend**',r=>r.fulfill({json:data}));await page.goto('/?mode=graph');await expect(page.locator('#axis-notice')).toContainText('자동 범위');await expect(page.locator('.chart-target')).toHaveCount(0);
+ await page.locator('#graph-options summary').click();await page.locator('#axis-mode').selectOption('fixed');await page.locator('#axis-min').fill('100');await page.locator('#axis-max').fill('140');await page.locator('#graph-options-save').click();await expect(page.locator('#axis-notice')).toContainText('범위 밖 온도 있음');await expect(page.locator('#graph-high')).toHaveText('900.0 ℃');await expect(page.locator('.candles')).toHaveAttribute('class','candles');await expect(page.locator('#trend-chart g[clip-path]')).toHaveCount(1);
+});
+test('monitor and graph fit phone, narrow desktop and TV with visible status disclosures',async({page})=>{
+ await page.route('**/api/latest',r=>r.fulfill({json:sample()}));await page.route('**/api/trend**',r=>r.fulfill({json:trendSample()}));
+ for(const size of [{width:390,height:844},{width:887,height:1200},{width:1920,height:1080}]){
+  await page.setViewportSize(size);await page.goto('/?mode=normal');await expect(page.locator('#reading-age')).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:`test-results/normal-${size.width}.png`,fullPage:true});
+  await page.locator('#graph-mode').click();await expect(page.locator('#graph-measured')).toHaveText('60');await expect(page.locator('#quality-chart')).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);const tip=await page.locator('#graph-tooltip').boundingBox(),plot=await page.locator('#chart-wrap').boundingBox();expect(tip.x).toBeGreaterThanOrEqual(plot.x);expect(tip.x+tip.width).toBeLessThanOrEqual(plot.x+plot.width+1);await page.screenshot({path:`test-results/graph-${size.width}.png`,fullPage:true});
+ }
+});
+
+test('graph fetch errors visibly distinguish failed initial loading from retained history',async({page})=>{
+ let offline=true;await page.route('**/api/latest',r=>r.fulfill({json:sample()}));await page.route('**/api/trend**',r=>offline?r.abort():r.fulfill({json:trendSample()}));
+ await page.goto('/?mode=graph');await expect(page.locator('#graph-empty')).toContainText('불러오지');await expect(page.locator('#graph-data-notice')).toBeVisible();await expect(page.locator('.candle')).toHaveCount(0);
+ offline=false;await page.locator('#graph-refresh').click();await expect(page.locator('.candle')).toHaveCount(60);await expect(page.locator('#graph-data-notice')).toBeHidden();offline=true;await page.locator('#graph-refresh').click();await expect(page.locator('#graph-data-notice')).toContainText('마지막 조회');await expect(page.locator('.candle')).toHaveCount(60);
 });

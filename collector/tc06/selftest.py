@@ -4,10 +4,11 @@ import platform
 from pathlib import Path
 import sys
 import traceback
+from .recovery import VERSION
 
 
 def run(report):
-    result = {"ok": False, "version": "0.5.0", "platform": platform.platform(),
+    result = {"ok": False, "version": VERSION, "platform": platform.platform(),
               "python": platform.python_version(), "bundled": bool(getattr(sys, "frozen", False)),
               "synthetic_only": True, "upload_performed": False, "cases": []}
     try:

@@ -21,7 +21,7 @@ let latest=null,serverOffset=0,networkOK=false,enabled=false,nextAnnouncement=0,
 let menuTimer=null,graph=null;
 let lastNormal=null,lastKind=null,serverEstimate=null;
 try{lastNormal=JSON.parse(localStorage.getItem('tc06-last-good-v1')||'null');}catch{}
-const labels={anchor_missing:'TC-06을 찾을 수 없습니다',ambiguous_anchor:'TC-06 표시가 여러 개입니다',occluded:'온도 영역이 다른 창에 가려졌습니다',ocr_failed:'온도를 판독할 수 없습니다',value_suspect:'숫자 재확인이 필요합니다',low_confidence:'숫자가 선명하지 않습니다',freshness_unverified:'원본 시계의 진행을 확인 중입니다',stale_source:'원본 영상 정지가 의심됩니다',source_error:'영상 입력을 확인해 주세요',window_missing:'HMI 창을 확인해 주세요'};
+const labels={ocr_timeout:'판독 시간이 초과되어 다시 읽는 중입니다',anchor_missing:'TC-06을 찾을 수 없습니다',ambiguous_anchor:'TC-06 표시가 여러 개입니다',occluded:'온도 영역이 다른 창에 가려졌습니다',ocr_failed:'온도를 판독할 수 없습니다',value_suspect:'숫자 재확인이 필요합니다',low_confidence:'숫자가 선명하지 않습니다',freshness_unverified:'원본 시계의 진행을 확인 중입니다',stale_source:'원본 영상 정지가 의심됩니다',source_error:'영상 입력을 확인해 주세요',window_missing:'HMI 창을 확인해 주세요'};
 const formatTime=iso=>iso?new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date(iso)):'—';
 function fresh(){const age=Date.now()+serverOffset-Date.parse(latest?.captured_at);return networkOK&&age>=-30000&&age<=150000;}
 function good(){return fresh()&&latest?.status==='ok'&&Number.isFinite(latest.value_c);}

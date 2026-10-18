@@ -181,3 +181,31 @@ test('a forecast-only window remains visible while measured extrema stay empty',
  await page.route('**/api/latest',r=>r.fulfill({json:forecastSample()}));await page.route('**/api/trend**',r=>r.fulfill({json:data}));await page.goto('/?mode=graph');await expect(page.locator('#graph-empty')).toBeHidden();await expect(page.locator('.chart-estimate')).toHaveCount(1);await expect(page.locator('.candle')).toHaveCount(0);await expect(page.locator('#graph-low')).toHaveText('—');await expect(page.locator('#graph-high')).toHaveText('—');
  const coordinates=await page.locator('.estimate-point').evaluate(el=>({y:Number(el.getAttribute('cy')),height:el.ownerSVGElement.viewBox.baseVal.height}));expect(coordinates.y).toBeGreaterThanOrEqual(30);expect(coordinates.y).toBeLessThan(coordinates.height-44);
 });
+
+test('update admin requires authentication and explicit apply; tokens are never persisted',async({page})=>{
+ const adminToken='synthetic-admin-token-'.padEnd(43,'x');let commands=0;
+ const device={device_id:'synthetic-pc',version:'0.6.0',status:'idle',online:true,seen_at:Date.now(),available:{version:'0.6.1'},command:null};
+ await page.route('**/api/updates/admin/**',async route=>{
+  expect(route.request().headers().authorization).toBe('Bearer '+adminToken);
+  const action=new URL(route.request().url()).pathname.split('/').at(-1);
+  if(action==='nonce')return route.fulfill({json:{nonce:'a'.repeat(48)}});
+  if(action==='command'){commands++;expect(route.request().method()).toBe('POST');expect(route.request().postDataJSON()).toEqual({device_id:'synthetic-pc'});return route.fulfill({json:{command:{id:'synthetic'}}});}
+  return route.fulfill({json:{devices:[device]}});
+ });
+ await page.goto('/updates.html');await expect(page.locator('#workspace')).toBeHidden();
+ await page.locator('#admin-token').fill(adminToken);await page.getByRole('button',{name:'관리자 연결',exact:true}).click();
+ await expect(page.locator('#devices')).toContainText('0.6.1');expect(commands).toBe(0);
+ await page.getByRole('button',{name:'업데이트 적용',exact:true}).click();expect(commands).toBe(0);
+ await expect(page.locator('#confirmation')).toBeVisible();await page.locator('#apply').click();await expect.poll(()=>commands).toBe(1);
+ expect(await page.evaluate(()=>localStorage.length)).toBe(0);expect(await page.evaluate(()=>sessionStorage.length)).toBe(0);
+ await page.locator('#logout').click();await expect(page.locator('#workspace')).toBeHidden();await expect(page.locator('#admin-token')).toHaveValue('');
+});
+
+test('update screen fits a phone and disables apply for offline or same-version agents',async({page})=>{
+ await page.setViewportSize({width:390,height:844});
+ await page.route('**/api/updates/admin/**',route=>route.fulfill({json:{devices:[{device_id:'synthetic-long-device-name-123456789',version:'0.6.0',status:'idle',online:false,seen_at:0,available:{version:'0.6.1'}}]}}));
+ await page.goto('/updates.html');await page.locator('#admin-token').fill('A'.repeat(43));await page.getByRole('button',{name:'관리자 연결',exact:true}).click();
+ await expect(page.getByRole('button',{name:'업데이트 적용',exact:true})).toBeDisabled();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.screenshot({path:'test-results/update-mobile.png',fullPage:true});
+});

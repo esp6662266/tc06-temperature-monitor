@@ -113,5 +113,10 @@ class Outbox:
     def count_pending(self):
         return self.db.execute("SELECT count(*) FROM records WHERE sent=0").fetchone()[0]
 
+    def last_good(self, device_id):
+        row = self.db.execute("SELECT payload FROM records WHERE json_extract(payload, '$.status')='ok' "
+            "AND json_extract(payload, '$.device_id')=? ORDER BY json_extract(payload, '$.captured_at') DESC LIMIT 1", (device_id,)).fetchone()
+        return json.loads(row[0]) if row else None
+
     def close(self):
         self.db.close()

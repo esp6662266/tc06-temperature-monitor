@@ -11,6 +11,7 @@ from pathlib import Path
 from .capture import DeviceSource, WindowSource
 from .core import Outbox, make_record, utc_now
 from .ocr import Reader
+from .recovery import Diagnostics, Recovery
 
 
 def validate_endpoint(base):
@@ -55,21 +56,30 @@ class Monitor:
     def _collect(self):
         source = None
         box = None
+        diagnostics = None
         try:
             box = Outbox(self.runtime / "history.sqlite3")
             reader = Reader(self.config.get("tesseract_path", ""))
-            next_save = time.monotonic() + 60
-            saved_once = False
+            recovery = Recovery()
+            try:
+                diagnostics = Diagnostics(self.runtime)
+            except OSError:
+                logging.warning("Local diagnostics unavailable; collection continues")
             while not self.stop_event.is_set():
                 started = time.monotonic()
+                frame = None
+                stage = "capture"
                 try:
                     if source is None:
                         source = (DeviceSource(self.config.get("device_index", 0)) if self.config["source"] == "device"
                                   else WindowSource(self.config["window_title"]))
                     frame = source.read()
+                    captured_at = utc_now()
+                    stage = "ocr"
                     reading = reader.read(frame, getattr(source, "visible", None))
+                    reading["captured_at"] = captured_at
                     if time.monotonic() - started > 20:
-                        reading.update(status="source_error", value_c=None)
+                        reading.update(status="ocr_timeout", value_c=None)
                         reader.invalidate()
                     roi = reading.get("roi")
                     if roi:
@@ -79,20 +89,30 @@ class Monitor:
                 except Exception as error:
                     reader.invalidate()
                     logging.warning("Capture/OCR error (%s)", type(error).__name__)
-                    reading = {"status": "source_error", "value_c": None, "captured_at": utc_now()}
+                    failure = ("window_missing" if str(error).startswith("window_missing") else "source_error") if stage == "capture" else "ocr_failed"
+                    if stage == "ocr" and "timeout" in str(error).lower():
+                        failure = "ocr_timeout"
+                    reading = {"status": failure, "value_c": None, "captured_at": utc_now(), "error_type": type(error).__name__}
                     if source:
                         source.close()
                         source = None
-                self.notify({"reading": reading})
+                reading["duration_ms"] = round((time.monotonic() - started) * 1000)
+                if frame is not None:
+                    reading["input_size"] = [int(frame.shape[1]), int(frame.shape[0])]
                 now = time.monotonic()
-                if now >= next_save or (not saved_once and reading.get("status") == "ok"):
+                schedule = recovery.observe(reading, now)
+                try:
+                    if diagnostics:
+                        diagnostics.record(reading, frame, now)
+                except OSError:
+                    logging.warning("Local diagnostics unavailable; collection continues")
+                self.notify({"reading": reading, "recovery": schedule, "ocr_ready": True})
+                if schedule["save"]:
                     record = make_record(reading, self.config["device_id"])
                     box.add(record)
                     self.notify({"saved_at": record["recorded_at"], "pending": box.count_pending()})
                     # Do not invent missing minute readings after a long pause.
-                    next_save = now + 60
-                    saved_once = True
-                self.stop_event.wait(max(.1, 2 - (time.monotonic() - started)))
+                self.stop_event.wait(max(.1, schedule["retry_seconds"] - (time.monotonic() - started)))
         except Exception as error:
             logging.error("Collector stopped (%s)", type(error).__name__)
             self.notify({"error": "수집 중단: 설정, OCR 설치 또는 로컬 저장소를 확인하세요"})
@@ -102,6 +122,8 @@ class Monitor:
                 source.close()
             if box:
                 box.close()
+            if diagnostics:
+                diagnostics.close()
 
     def _send(self):
         box = None

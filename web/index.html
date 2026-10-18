@@ -23,7 +23,7 @@
       </div><h3>현장 추천 색상 7가지</h3><div id="palettes" class="palettes" role="group" aria-label="추천 색상 조합"></div><p class="note">설정은 이 브라우저에 저장됩니다. 짧은 OCR 실패는 안정적인 최근 정상값 3~5개로 최대 2분까지 추정하며 ≈ 기호와 추정값 문구를 표시합니다. 조건이 안 맞거나 2분이 지나면 마지막 정상 온도와 지난 시간을 표시합니다. 과거 값을 현재 온도로 읽지 않도록 음성은 대기하고, 정상 수신이 재개되면 자동 복귀합니다. 정상 수신 이력이 없을 때만 기본값 38도를 사용합니다. 실측 봉과 통계는 유지하며, 추정값은 별도 점선으로 표시합니다.</p><p class="note">디스플레이에서 화면을 누르거나 리모컨 Enter를 누르면 메뉴가 나옵니다. Esc 또는 ‘일반 화면’을 누르면 돌아옵니다. 전체 화면과 음성은 브라우저에서 처음 한 번 조작이 필요할 수 있습니다.</p></section>
       <p id="retention-status" class="note">최근 30일 보관 (한국날짜 기준) · 매시 15분 자동 삭제 · 서버에는 온도 텍스트만 저장</p><details><summary>기록 다운로드</summary><div class="history"><label>기록 일자 (한국시간)<input id="history-day" type="date"></label><button id="download" class="secondary">CSV 다운로드</button></div><p class="note">영상에서 읽은 참고 표시값입니다. 운전·보호 판단은 기존 HMI에서 확인하세요.</p></details>
     </section>
-    <footer><span>1분 간격 저장 · 한국시간 표시</span><span id="updated">아직 수신한 값이 없습니다</span></footer>
+    <footer><a href="/updates.html">수집기 업데이트</a><span>1분 간격 저장 · 한국시간 표시</span><span id="updated">아직 수신한 값이 없습니다</span></footer>
   </main>
   <section id="graph-screen" aria-label="TC-06 온도 추이 그래프" hidden>
     <header class="graph-header"><div><span id="graph-reading-label" class="eyebrow">TC-06 · 현재 온도</span><div class="graph-reading"><strong id="graph-temperature">38</strong><span>℃</span><span id="graph-quality" class="badge">기본값 · 38도</span></div><p id="graph-current-status" class="note">수신 상태 확인 중</p></div><div class="graph-navigation"><button id="graph-to-display" class="secondary">숫자 화면</button><button id="graph-to-normal" class="secondary">일반 화면</button><button id="graph-speech" class="secondary">음성 시작</button><button id="graph-fullscreen">전체 화면</button></div></header>

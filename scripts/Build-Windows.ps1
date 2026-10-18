@@ -42,7 +42,7 @@ try {
     $env:PATH = "$unpacked;$env:PATH"
     & $Python -m pytest -q --junitxml=dist/release/python-tests.xml
     if ($LASTEXITCODE -ne 0) { throw 'Python checks failed.' }
-    & $Python -m PyInstaller --noconfirm --clean --onedir --windowed --name TC06Monitor --paths collector --hidden-import tc06.selftest collector\app.py
+    & $Python -m PyInstaller --noconfirm --clean --onedir --windowed --name TC06Monitor --paths collector --hidden-import tc06.selftest --hidden-import tc06.update_agent collector\app.py
     if ($LASTEXITCODE -ne 0) { throw 'Windows executable build failed.' }
     $bundle = Join-Path $root 'dist\TC06Monitor'
     $ocr = Join-Path $bundle 'ocr'
@@ -110,6 +110,12 @@ try {
         $env:TESSDATA_PREFIX = $previousData
     }
     Compress-Archive -Path "$bundle\*" -DestinationPath "$release\TC06Monitor-Portable-$version-x64.zip" -Force
+    & $Python scripts\verify-windows-update.py $bundle "$release\update-verification.json"
+    if ($LASTEXITCODE -ne 0) { throw 'Packaged update and rollback verification failed.' }
+    if ($env:TC06_SIGNING_KEY) {
+        & $Python scripts\sign-update.py "$release\TC06Monitor-Portable-$version-x64.zip" $version
+        if ($LASTEXITCODE -ne 0) { throw 'Update manifest signing failed.' }
+    }
     $lines = Get-ChildItem $release -File | Where-Object { $_.Extension -in '.exe','.zip' } | ForEach-Object {
         (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() + '  ' + $_.Name
     }

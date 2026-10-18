@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="ko">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><title>TC-06 수집기 업데이트</title><link rel="stylesheet" href="/updates.css"><script type="module" src="/updates.js"></script></head>
+<body><main>
+<header><a href="/?mode=normal">TC-06 모니터</a><a href="/?mode=graph">온도 그래프</a></header>
+<section class="intro"><h1>수집기 업데이트</h1><p>현장 PC의 버전을 확인하고, 준비된 새 버전을 적용합니다.</p></section>
+<p id="notice" role="status" aria-live="polite">관리자 연결 후 현장 PC의 상태를 확인하세요.</p>
+<form id="login"><label for="admin-token">업데이트 관리 코드</label><div class="input-row"><input id="admin-token" type="password" autocomplete="off" required minlength="40" maxlength="100"><button>관리자 연결</button></div><p class="muted">온도 조회·업로드에는 관리 코드가 필요하지 않습니다.</p></form>
+<section id="workspace" hidden>
+<div class="toolbar"><h2>현장 PC</h2><div><button id="refresh" class="secondary">새로고침</button><button id="logout" class="secondary">연결 해제</button></div></div>
+<p id="empty" class="muted">연결된 PC가 없습니다. 아래에서 PC 연결 코드를 발급하세요.</p>
+<div id="devices"></div>
+<section id="confirmation" hidden><h2>업데이트 적용 확인</h2><p id="confirm-text"></p><p>교체 중에는 온도 수집이 잠시 멈춥니다. 새 프로그램이 시작되지 않으면 이전 버전으로 복구합니다.</p><div class="actions"><button id="apply">업데이트 실행</button><button id="cancel" class="secondary">취소</button></div></section>
+<details id="pairing"><summary>새 PC 연결</summary><form id="pair"><label for="device-id">수집기에 설정한 PC 식별자</label><div class="input-row"><input id="device-id" pattern="[A-Za-z0-9_-]{1,64}" placeholder="예: hmi-room-01" required maxlength="64"><button>연결 코드 발급</button></div></form><div id="pair-result" hidden><label for="pair-token">이 PC의 연결 코드</label><div class="input-row"><input id="pair-token" readonly autocomplete="off"><button id="copy" class="secondary">복사</button></div><p>수집기의 ‘원격 업데이트 연결’에 입력하세요. 이 화면을 닫으면 다시 표시하지 않습니다.</p></div></details>
+</section>
+<footer>Windows 설치판 0.6.0부터 연결할 수 있습니다. 기존 PC에는 최초 한 번 새 설치판을 설치하세요.</footer>
+</main></body></html>

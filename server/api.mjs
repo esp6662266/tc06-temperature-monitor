@@ -3,7 +3,7 @@ import { estimateAt, ESTIMATE_STATUSES, MAX_ESTIMATE_MS } from './estimate.mjs';
 import { RETENTION_DAYS, dayKST, oldestDay, expired } from './retention.mjs';
 
 const STATUSES = new Set(['ok', 'anchor_missing', 'ambiguous_anchor', 'occluded', 'ocr_failed',
-  'value_suspect', 'low_confidence', 'freshness_unverified', 'stale_source', 'source_error', 'window_missing']);
+  'value_suspect', 'low_confidence', 'freshness_unverified', 'stale_source', 'source_error', 'window_missing', 'ocr_timeout']);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const AGE_MS = 150_000;
 const MAX_BODY = 2_000_000;

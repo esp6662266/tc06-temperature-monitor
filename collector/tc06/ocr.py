@@ -109,12 +109,14 @@ def matches_layout(mask, text):
     return not extras and len(dots) <= 1
 
 
-def read_number(crop, min_confidence):
+def read_number(crop, min_confidence, evidence=None):
     images, mask = number_images(crop)
     readings, scores = [], []
     for image, mode in zip(images, (7, 13)):
         words = pytesseract.image_to_data(image, lang="eng", config=f"--psm {mode} -c tessedit_char_whitelist=0123456789.- -c load_system_dawg=0 -c load_freq_dawg=0", output_type=Output.DICT, timeout=5)
         text = "".join(words["text"]).strip()
+        if evidence is not None:
+            evidence.append(re.sub(r"[^0-9.\-]", "", text)[:24])
         if not re.fullmatch(r"-?\d{1,4}\.\d", text):
             return None, 0, "ocr_failed"
         readings.append(text)
@@ -166,9 +168,10 @@ class Reader:
         if visible and not visible(region):
             return dict(result, status="occluded")
         result["roi"] = [x1, y1, x2, y2]
+        result["ocr_candidates"] = []
         crop = gray[y1:y2, x1:x2]
         try:
-            value, confidence, failure = read_number(crop, self.min_confidence)
+            value, confidence, failure = read_number(crop, self.min_confidence, result["ocr_candidates"])
         except ValueError:
             return dict(result, status="ocr_failed")
         result["confidence"] = confidence

@@ -1,9 +1,9 @@
 {
   "name": "tc06-temperature-monitor",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "description": "Read-only TC-06 OCR collector, Netlify storage API and Korean voice dashboard",
   "scripts": {
-    "test": "node --test tests/api.test.mjs tests/retention.test.mjs tests/voice.test.mjs tests/trend.test.mjs tests/estimate.test.mjs",
+    "test": "node --test tests/api.test.mjs tests/retention.test.mjs tests/voice.test.mjs tests/trend.test.mjs tests/estimate.test.mjs tests/updates.test.mjs",
     "test:web": "playwright test",
     "dev": "node server/dev.mjs"
   },

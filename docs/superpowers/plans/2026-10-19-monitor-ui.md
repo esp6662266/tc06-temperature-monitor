@@ -62,5 +62,9 @@ Graph: [live reading + age / navigation] [time controls] [measured / failed / em
 **Files:** web/sw.js, README.md, docs/VERIFICATION.md, this plan.
 - [x] Bump web cache revision, cache fallback asset and document the web-only release.
 - [x] Run Python, Node and Chrome suites; inspect synthetic local UI at 390×844, 887×1200 and 1920×1080.
-- [ ] Confirm excluded update files unchanged; commit/push and production deploy without changing environment variables.
-- [ ] Verify deployed assets, public API and live screen; distinguish Windows/field checks not performed.
+- [x] Confirm excluded update files unchanged; commit/push and production deploy without changing environment variables.
+- [x] Verify deployed assets, public API and live screen; distinguish Windows/field checks not performed.
+
+## Completion
+
+Runtime commit `fe9dc18`; production deploy `6ad4ead55eec95c6c0ccac9e`. Python 100, Node 53, Chrome 38 passed, plus the targeted final phone/desktop/TV layout check. Deployed web assets match the verified local files. Update-page bytes and authentication remain unchanged. Windows collector/HMI/TV field operation was not changed or validated by this web-only release.

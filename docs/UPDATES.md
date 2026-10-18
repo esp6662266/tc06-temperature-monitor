@@ -37,7 +37,7 @@
 
 ## 운영 설정과 다음 릴리스
 
-관리 코드: Netlify **TC-06 전용 사이트**의 Functions 환경 변수 `TC06_UPDATE_ADMIN_TOKEN` (32바이트 난수의 base64url 문자열). 설정이 없으면 업데이트 API 전체가 503으로 비활성이다. 온도 조회·수신 API는 계속 공개다.
+관리 코드: Netlify **TC-06 전용 사이트**의 Functions 환경 변수 `TC06_UPDATE_ADMIN_TOKEN` (32바이트 난수의 base64url 문자열). Free 계정에서는 세부 scope/Secret 옵션 대신 사이트의 표준 환경 변수로 설정하며, 값 자체를 소스나 웹 JS에 넣지 않는다. 운영 반영은 `netlify deploy --prod --context production`으로 배포한 뒤 인증 응답을 확인한다. 설정이 없으면 업데이트 API 전체가 503으로 비활성이다. 온도 조회·수신 API는 계속 공개다.
 
 배포 서명: 검증된 Windows 포터블 산출물을 내려받아 로컬 비공개 키로 `scripts/sign-update.py <포터블ZIP> <버전> --key-file .private-update/release-signing.key`를 실행한다. 별도 승인된 CI 환경에서는 환경 변수 `TC06_SIGNING_KEY`에 32바이트 Ed25519 비공개 키의 base64를 전달해 빌드 후 서명할 수도 있다. 현재 저장소 workflow는 기존 수동 빌드를 유지하며 비공개 키를 전달하지 않는다. 공개 키는 `collector/tc06/trust.py`, `server/update-trust.mjs`에 고정돼 있다. 키를 바꿀 때는 기존 프로그램의 신뢰 키 이전 절차가 필요하며 임의로 재생성하지 않는다.
 

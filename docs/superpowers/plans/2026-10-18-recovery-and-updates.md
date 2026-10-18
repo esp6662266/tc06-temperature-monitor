@@ -66,7 +66,7 @@
 
 **Files:** README, CHANGELOG, Windows handoff/install and verification/update docs.
 
-- [ ] Run Python/Node/browser checks and review diff for secrets and operations outside scope.
-- [ ] Push reviewed source and run Windows build/install/update recovery verification; inspect downloadable artifacts with release-artifact-review.
+- [x] Run Python/Node/browser checks and review diff for secrets and operations outside scope.
+- [x] Push reviewed source and run Windows build/install/update recovery verification; inspect downloadable artifacts with release-artifact-review.
 - [ ] Publish verified installer/portable/signed manifest and deploy web only after auth and agent tests pass.
 - [ ] Reopen deployed assets/API, distinguish bootstrap field install and real source tests still pending.

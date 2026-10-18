@@ -11,7 +11,7 @@ GitHub 자동 배포 연결은 설정하지 않았다. 현재 Netlify CLI 수동
 
 ```sh
 npm ci
-netlify deploy --prod --site 67ba3ef2-67cd-4fdb-afdb-bd303748108c --dir web --functions netlify/functions
+netlify deploy --prod --context production --site 67ba3ef2-67cd-4fdb-afdb-bd303748108c --dir web --functions netlify/functions
 ```
 
 ## 구성
@@ -61,3 +61,7 @@ Node.js 22 이상에서 `npm ci`, `npm run dev` 후 `http://127.0.0.1:8766`을 �
 - https://docs.netlify.com/build/functions/scheduled-functions/
 - https://docs.netlify.com/build/data-and-storage/netlify-blobs/
 - https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API
+
+## 0.6.0 업데이트 관리
+
+`TC06_UPDATE_ADMIN_TOKEN`은 사이트의 production 환경 변수로 설정한다. Free 계정에서 Functions 전용 scope/Secret 옵션은 허용되지 않아 표준 사이트 환경 변수를 사용한다. CLI의 환경 변수 설정 종료 코드만 믿지 않고 실제 production 값을 로컬 원본과 출력 없이 대조한다. `--context production`으로 재배포하고 인증 요청 200/미인증 401을 확인한다. 미설정이면 업데이트 API는 503으로 비활성이다. 온도 API는 공개로 유지한다.

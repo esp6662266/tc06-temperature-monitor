@@ -47,7 +47,7 @@ with tempfile.TemporaryDirectory(prefix='tc06-update-check-') as temporary:
         path=root/'job.json';atomic_json(path,job)
         outcome=apply_job(path,runtime)
         assert outcome['status']=='completed',outcome
-        assert active_executable(runtime)==staged/'TC06Monitor.exe'
+        assert active_executable(runtime, installed_version='0.5.0')==staged/'TC06Monitor.exe'
         assert marker.read_bytes().startswith(b'Synthetic')
         result['successful_launch_and_switch']=True
         stop_candidate()

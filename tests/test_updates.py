@@ -142,3 +142,10 @@ def test_restarted_candidate_reports_switching_then_reads_final_result(tmp_path,
     poller.run()
     assert [item['status'] for item in sent]==['switching','completed']
     assert sent[-1]['result']['gap_seconds']==2
+
+
+def test_newer_manual_installer_never_launches_an_older_cached_version(tmp_path):
+    exe=tmp_path/'updates'/'versions'/'0.6.1'/'TC06Monitor.exe';exe.parent.mkdir(parents=True);exe.write_bytes(b'fixture')
+    updates.atomic_json(tmp_path/'updates'/'active.json', {'executable':str(exe),'version':'0.6.1'})
+    assert active_executable(tmp_path, installed_version='0.7.0') is None
+    assert active_executable(tmp_path, installed_version='0.6.0')==exe

@@ -265,6 +265,11 @@ class UpdatePoller:
                     if self.latest and version_tuple(self.latest["version"]) > version_tuple(self.version):
                         label = "새 버전 " + self.latest["version"] + " · 웹에서 업데이트 실행 가능"
                     self.notify({"update_status": label})
+                else:
+                    labels = {"completed": "업데이트 완료 · 현재 버전 " + self.version,
+                        "rolled_back": "업데이트 실패 후 이전 버전으로 복구됨 · " + self.version,
+                        "failed": "업데이트 실패 · 기존 수집 계속", "switching": "새 버전 시작 확인 중"}
+                    self.notify({"update_status": labels.get(self.status, "업데이트 상태: " + self.status)})
             except Exception:
                 self.notify({"update_status": "업데이트 서버 연결 확인 필요 · 온도 수집 계속"})
             self.stop_event.wait(15)

@@ -20,7 +20,8 @@ function render(devices){
     for(const [label,value]of[['현재 버전',device.version||'연결 전'],['배포 버전',device.available?.version||'확인 전']]){const item=text('span',label);item.append(text('strong',value));versions.append(item);}
     info.append(versions);
     const state=device.command?.state||device.status;
-    info.append(text('p',states[state]||'상태 확인 필요'));
+    const expired=state==='queued'&&device.command.expires_at<=Date.now();
+    info.append(text('p',expired?'업데이트 요청 만료 · 다시 요청하세요':states[state]||'상태 확인 필요'));
     if(device.result&&['completed','rolled_back'].includes(state))info.append(text('p',`프로그램 교체·확인에 걸린 시간 ${device.result.gap_seconds}초`));
     info.append(text('p',device.seen_at?'마지막 응답 '+new Date(device.seen_at).toLocaleString('ko-KR'):'수집기에서 연결 코드를 입력하세요.'));
     const actions=document.createElement('div');actions.className='actions';

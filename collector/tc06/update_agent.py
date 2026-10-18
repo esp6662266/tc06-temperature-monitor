@@ -7,9 +7,10 @@ from pathlib import Path
 import subprocess
 import time
 from .updates import atomic_json, version_tuple
+from .recovery import VERSION
 
 
-def active_executable(runtime):
+def active_executable(runtime, installed_version=VERSION):
     root = Path(runtime) / "updates"
     journal = root / "transaction.json"
     pointer = root / "active.json"
@@ -20,7 +21,7 @@ def active_executable(runtime):
                 with UpdateLock(root / "agent.lock"):
                     transaction = json.loads(journal.read_text("utf-8"))
                     if transaction["status"] != "switching":
-                        return active_executable(runtime)
+                        return active_executable(runtime, installed_version)
                     # Power loss or agent crash: restore last known working pointer.
                     atomic_json(pointer, transaction["previous_pointer"])
                     transaction["status"] = "rolled_back"
@@ -35,6 +36,8 @@ def active_executable(runtime):
     if not data.get("executable"):
         return None
     version_tuple(data["version"])
+    if version_tuple(data["version"]) <= version_tuple(installed_version):
+        return None  # A newer manual installer must never delegate to an older cached release.
     exe = Path(data["executable"]).resolve()
     expected = (root / "versions" / data["version"] / "TC06Monitor.exe").resolve()
     if exe != expected or not exe.is_file():

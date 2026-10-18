@@ -93,3 +93,11 @@ test('update cleanup removes only expired nonces, rate counters and old audit, p
  assert.equal((await cleanupUpdates(store,now)).deleted,3);
  assert.ok(await store.get('devices/pc'));assert.ok(await store.get('nonces/new'));
 });
+
+test('an ambiguous failed claim is terminal and cannot later be claimed or reported completed',async()=>{
+ const s=setup(),token=await s.pair();await s.heartbeat(token);const {command}=await(await s.adminPost('command',{device_id:deviceId})).json();
+ await s.heartbeat(token,{status:'failed',command_id:command.id});
+ assert.equal((await s.call('device/'+deviceId+'/claim',{auth:token,data:{command_id:command.id}})).status,409);
+ await s.heartbeat(token,{status:'completed',command_id:command.id});
+ assert.equal((await(await s.call('admin/overview')).json()).devices[0].command.state,'failed');
+});

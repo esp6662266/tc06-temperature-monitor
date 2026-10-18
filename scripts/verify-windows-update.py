@@ -10,7 +10,7 @@ import tempfile
 import time
 import uuid
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"collector"))
-from tc06.update_agent import apply_job, active_executable
+from tc06.update_agent import active_executable
 from tc06.updates import atomic_json
 from tc06.recovery import VERSION
 
@@ -45,7 +45,8 @@ with tempfile.TemporaryDirectory(prefix='tc06-update-check-') as temporary:
         job={'command_id':str(uuid.uuid4()),'version':VERSION,'executable':str(staged/'TC06Monitor.exe'),
              'previous_executable':str(bundle/'TC06Monitor.exe'),'parent_pid':os.getpid()+1000000,'stopped_at':time.time()}
         path=root/'job.json';atomic_json(path,job)
-        outcome=apply_job(path,runtime)
+        subprocess.run([str(bundle/'TC06Monitor.exe'),'--apply-update',str(path)],cwd=bundle,timeout=200,check=True)
+        outcome=json.loads((root/'result.json').read_text('utf-8'))
         assert outcome['status']=='completed',outcome
         assert active_executable(runtime, installed_version='0.5.0')==staged/'TC06Monitor.exe'
         assert marker.read_bytes().startswith(b'Synthetic')
@@ -56,7 +57,8 @@ with tempfile.TemporaryDirectory(prefix='tc06-update-check-') as temporary:
         (bad/'TC06Monitor.exe').write_bytes(b'Synthetic corrupt executable')
         job.update(command_id=str(uuid.uuid4()),version=bad_version,executable=str(bad/'TC06Monitor.exe'),stopped_at=time.time())
         atomic_json(path,job)
-        outcome=apply_job(path,runtime)
+        subprocess.run([str(bundle/'TC06Monitor.exe'),'--apply-update',str(path)],cwd=bundle,timeout=200,check=True)
+        outcome=json.loads((root/'result.json').read_text('utf-8'))
         assert outcome['status']=='rolled_back',outcome
         assert marker.read_bytes().startswith(b'Synthetic')
         result['corrupt_executable_rollback']=True

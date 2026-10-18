@@ -162,8 +162,10 @@ export function createUpdates(getStore,{adminToken=()=>process.env.TC06_UPDATE_A
               result.result={command_id:input.command_id,gap_seconds:input.result.gap_seconds};
             }
             if(available)result.available=available;
-            if(input.command_id && UUID.test(input.command_id) && current.command?.id===input.command_id && current.command.state==='claimed'){
-              if(['completed','rolled_back','failed'].includes(input.status))result.command={...current.command,state:input.status,finished_at:time};
+            else if(Object.hasOwn(input,'available') && input.available===null)result.available=null;
+            if(input.command_id && UUID.test(input.command_id) && current.command?.id===input.command_id){
+              if((current.command.state==='claimed' && ['completed','rolled_back','failed'].includes(input.status)) ||
+                (current.command.state==='queued' && input.status==='failed'))result.command={...current.command,state:input.status,finished_at:time};
             }
             return result;
           });

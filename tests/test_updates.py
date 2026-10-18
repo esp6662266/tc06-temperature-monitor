@@ -152,3 +152,22 @@ def test_newer_manual_installer_never_launches_an_older_cached_version(tmp_path)
     updates.atomic_json(tmp_path/'updates'/'active.json', {'executable':str(exe),'version':'0.6.1'})
     assert active_executable(tmp_path, installed_version='0.7.0') is None
     assert active_executable(tmp_path, installed_version='0.6.0')==exe
+
+
+def test_ambiguous_claim_response_is_reported_failed_instead_of_executing(tmp_path, monkeypatch):
+    from tc06.updates import UpdatePoller
+    updates.atomic_json(tmp_path/'update-link.json', {'base':'https://example.test','device_id':'synthetic-pc','token':'A'*43})
+    poller=UpdatePoller(tmp_path,lambda event:None);sent=[];command_id=str(uuid.uuid4())
+    class Client:
+        def __init__(self,**kwargs):pass
+        def request(self,action,data):
+            if action=='claim':raise OSError('Synthetic lost claim response')
+            sent.append(data)
+            if len(sent)==1:return {'command':{'id':command_id}}
+            poller.stop_event.set();return {}
+    monkeypatch.setattr(updates,'ControlClient',Client)
+    monkeypatch.setattr(updates,'latest_manifest',lambda:None)
+    monkeypatch.setattr(poller.stop_event,'wait',lambda seconds:False)
+    monkeypatch.setattr(updates,'stage_release',lambda *a,**k:pytest.fail('Must not execute an ambiguous claim'))
+    poller.run()
+    assert sent[-1]['status']=='failed' and sent[-1]['command_id']==command_id

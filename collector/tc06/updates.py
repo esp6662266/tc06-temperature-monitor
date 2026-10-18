@@ -241,10 +241,11 @@ class UpdatePoller:
                 command = response.get("command")
                 if command and command["id"] not in self.seen:
                     self.seen.add(command["id"])
+                    self.command_id, self.status, self.result = command["id"], "failed", None
+                    atomic_json(self.runtime / "updates" / "last-command.json", {"command_id": self.command_id})
                     # The server atomically consumes this unique, unexpired command.
                     self.client.request("claim", {"command_id": command["id"]})
                     self.command_id, self.status = command["id"], "downloading"
-                    atomic_json(self.runtime / "updates" / "last-command.json", {"command_id": self.command_id})
                     self.notify({"update_status": "업데이트 다운로드·서명 확인 중 · 온도 수집 계속"})
                     self.client.request("heartbeat", {"version": self.version, "status": self.status, "command_id": self.command_id})
                     try:

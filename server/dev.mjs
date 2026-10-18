@@ -17,9 +17,9 @@ const manifest=JSON.parse(await readFile(path.join(base,'voice/manifest.json'),'
 for(const key of Object.keys(manifest.words))allowed.set(`/voice/${key}.mp3`,[`voice/${key}.mp3`,'audio/mpeg']);
 const server = http.createServer(async (req, res) => {
   try {
-    const url = new URL(req.url, 'http://127.0.0.1');
+    const url = new URL(req.url, `http://${req.headers.host || '127.0.0.1'}`);
     if (url.pathname.startsWith('/api/')) {
-      const request = new Request(new URL(req.url, 'http://127.0.0.1'), {
+      const request = new Request(url, {
         method: req.method, headers: req.headers,
         ...(req.method !== 'GET' && req.method !== 'HEAD' ? { body: req, duplex: 'half' } : {}),
       });

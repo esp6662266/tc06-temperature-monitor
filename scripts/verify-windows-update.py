@@ -48,7 +48,7 @@ with tempfile.TemporaryDirectory(prefix='tc06-update-check-') as temporary:
         subprocess.run([str(bundle/'TC06Monitor.exe'),'--apply-update',str(path)],cwd=bundle,timeout=200,check=True)
         outcome=json.loads((root/'result.json').read_text('utf-8'))
         assert outcome['status']=='completed',outcome
-        assert active_executable(runtime, installed_version='0.5.0')==staged/'TC06Monitor.exe'
+        assert active_executable(runtime, installed_version='0.5.0')==(staged/'TC06Monitor.exe').resolve()
         assert marker.read_bytes().startswith(b'Synthetic')
         result['successful_launch_and_switch']=True
         stop_candidate()

@@ -4,6 +4,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 import time
+import uuid
 
 VERSION = "0.6.0"
 STATUS_TEXT = {
@@ -75,7 +76,7 @@ class Diagnostics:
             if crop.size:
                 ratio = min(1, 640 / crop.shape[1], 160 / crop.shape[0])
                 crop = cv2.resize(crop, None, fx=ratio, fy=ratio)
-                image = self.directory / f"crop-{time.time_ns()}.png"
+                image = self.directory / f"crop-{time.time_ns()}-{uuid.uuid4().hex}.png"
                 if cv2.imwrite(str(image), crop):
                     self.image_at = now
                     item["crop"] = image.name

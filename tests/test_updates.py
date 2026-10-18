@@ -30,7 +30,10 @@ def release(signing, extra=None, version='0.6.1'):
     files = {'TC06Monitor.exe': b'SYNTHETIC NOT EXECUTABLE', 'ocr/tesseract.exe': b'synthetic', 'ocr/tessdata/eng.traineddata': b'synthetic'}
     files.update(extra or {})
     with zipfile.ZipFile(buffer, 'w') as archive:
-        for name, data in files.items(): archive.writestr(name, data)
+        for name, data in files.items():
+            info=zipfile.ZipInfo()
+            info.filename=name  # Preserve raw separators, including on Windows.
+            archive.writestr(info, data)
     raw = buffer.getvalue()
     data = {'version': version, 'url': f'{updates.REPO}/releases/download/v{version}/TC06Monitor-Portable-{version}-x64.zip',
             'size': len(raw), 'unpacked_size': sum(map(len, files.values())), 'sha256': hashlib.sha256(raw).hexdigest()}

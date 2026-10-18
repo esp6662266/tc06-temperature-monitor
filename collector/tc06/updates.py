@@ -133,9 +133,9 @@ def stage_release(envelope, runtime, current=VERSION, opener=release_open, cance
                 raise ValueError("Archive unpacked size mismatch")
             seen = set()
             for info in infos:
-                name = info.filename
+                name = info.orig_filename
                 path = PurePosixPath(name)
-                if (not name or not path.parts or "\\" in name or ":" in name or path.is_absolute() or
+                if (not name or not path.parts or any(ord(char) < 32 or char in '\\:<>"|?*' for char in name) or path.is_absolute() or
                         any(piece in {"..", "."} or piece.endswith((".", " ")) for piece in path.parts) or
                         stat.S_ISLNK(info.external_attr >> 16) or name.casefold() in seen):
                     raise ValueError("Unsafe archive entry")

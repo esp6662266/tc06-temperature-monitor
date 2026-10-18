@@ -52,6 +52,8 @@ try {
     Copy-Item $eng "$ocr\tessdata\eng.traineddata"
     Copy-Item packaging\windows-deps.json "$bundle\runtime-origins.json"
     Copy-Item README.md, docs\WINDOWS_INSTALL.md, packaging\THIRD_PARTY.md $bundle
+    Copy-Item docs "$bundle\docs" -Recurse
+    Copy-Item docs\UPDATES.md $bundle
     & $Python scripts\collect-licenses.py "$bundle\licenses"
     if ($LASTEXITCODE -ne 0) { throw 'License collection failed.' }
 

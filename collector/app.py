@@ -76,7 +76,11 @@ def run_gui(autostart=False, smoke_report=None, update_health=None):
     detail = tk.StringVar(value="")
     speech_status = tk.StringVar(value="음성: 웹 숫자 TTS 사용 · PC 음성 설치 불필요")
     update_status = tk.StringVar(value="원격 업데이트 연결 전")
-    ttk.Label(pane, textvariable=value, font=("Segoe UI", 36, "bold")).grid(row=7, column=0, columnspan=2, pady=12)
+    held_status = tk.StringVar(value="")
+    reading_panel = ttk.Frame(pane)
+    reading_panel.grid(row=7, column=0, columnspan=2, pady=12)
+    ttk.Label(reading_panel, textvariable=value, font=("Segoe UI", 36, "bold")).pack()
+    ttk.Label(reading_panel, textvariable=held_status, wraplength=760).pack()
     for row, var in enumerate([status, saved, uploaded, detail], 8):
         ttk.Label(pane, textvariable=var, wraplength=700).grid(row=row, column=0, columnspan=2, sticky="w", pady=4)
     preview = ttk.Label(pane, text="판독 영역 미리보기")
@@ -145,6 +149,7 @@ def run_gui(autostart=False, smoke_report=None, update_health=None):
         if state["monitor"]:
             state["monitor"].stop()
         value.set("— ℃")
+        held_status.set("")
         state["reading"] = None
         status.set("중지 요청 · 진행 중인 판독/전송 종료를 기다리는 중")
 
@@ -202,7 +207,9 @@ def run_gui(autostart=False, smoke_report=None, update_health=None):
             now = dt.datetime.now(dt.timezone.utc)
             if (now - dt.datetime.fromisoformat(reading["captured_at"])).total_seconds() > 150:
                 reading = dict(reading, status="source_error", value_c=None)
-            value.set(display_reading(reading, state["last_good"], now))
+            parts = display_reading(reading, state["last_good"], now).split(" · ", 1)
+            value.set(parts[0])
+            held_status.set(parts[1] if len(parts) > 1 else "")
         if update_health and not state["health_written"] and root.winfo_viewable():
             configured = bool(config.get("server_url") and (config.get("source") == "device" or config.get("window_title")))
             if not configured or (state["ocr_ready"] and state["api_ready"]):

@@ -1,6 +1,6 @@
 # TC-06 Web Usability Implementation Plan
 
-> **Execution:** Follow the project instructions and existing user authorization. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Execution:** Follow the project instructions and existing user authorization. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Make the existing TC-06 homepage recover from connection/settings failures and keep TV controls and CSV downloads usable.
 
@@ -65,6 +65,13 @@ Review: this is an existing field monitor; a large number and quiet controls are
 
 - [x] Include focused regression spec files, bump service worker cache, run `npm test`, `npm run test:web`, and `python -m pytest`.
 - [x] Inspect local desktop/mobile screens and keyboard interactions with synthetic fixtures only.
-- [ ] Commit scoped source/docs to GitHub and deploy the verified tree to the existing temperature-only Netlify site.
-- [ ] Reopen production, compare deployed asset hashes, read public APIs, and document boundaries and deployment evidence.
+- [x] Commit scoped source/docs to GitHub and deploy the verified tree to the existing temperature-only Netlify site.
+- [x] Reopen production, compare deployed asset hashes, read public APIs, and document boundaries and deployment evidence.
 
+
+## Completion evidence
+
+- Python 100, Node 55, Chrome 59 passed (214 total).
+- Desktop/mobile/TV-size captures inspected; focused remote menu and stale-age overlap checked.
+- Runtime source `9e3a01f`, Netlify production `6ad9ff04faa68879ccbf9a77`. Production assets match, real read-only CSV parses, updater assets unchanged.
+- Field Windows/HMI/physical TV operation remains separately unverified.

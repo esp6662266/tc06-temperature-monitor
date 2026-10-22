@@ -36,3 +36,15 @@ body[data-mode=display][data-state=fallback] #display-state,body[data-mode=displ
 
 #graph-data-notice{margin:0;padding:10px 14px;border:1px solid #77603b;border-radius:8px;color:var(--warning);background:#392c18;line-height:1.6;font-size:14px;flex-shrink:0}
 @media(max-width:650px){.controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch}.controls button{white-space:nowrap}}
+
+/* Keep field controls usable with a TV remote and narrow displays. */
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid #ffbd59;outline-offset:4px}
+#display-menu{width:max-content;flex-wrap:wrap;justify-content:center}
+#display-menu button:focus-visible{outline-offset:1px}
+body[data-mode=display] #display-menu:not([hidden])~#display-held{visibility:hidden}
+#display-refresh-status{flex-basis:100%;text-align:center;color:var(--muted);font-size:13px;line-height:1.6;margin:0}
+#refresh-status{margin:10px 0 0;min-height:1.6em}
+#history-status[data-state=error],#refresh-status[data-state=error]{color:var(--warning)}
+.history{gap:12px}
+.history input{min-width:0;max-width:100%}
+@media(max-width:650px){.controls #refresh-latest{grid-column:1/-1}.history label{flex-wrap:wrap}#display-menu{max-width:calc(100vw - 24px)}}

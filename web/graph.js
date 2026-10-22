@@ -6,11 +6,15 @@
   const stamp=new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});
   const day=value=>new Date(value+9*3600000).toISOString().slice(0,10);
   const number=value=>Number.isFinite(value)?value.toFixed(1):'—';
+  function savedSettings(key){
+    try{const value=JSON.parse(localStorage.getItem(key)||'{}');if(value&&typeof value==='object'&&!Array.isArray(value))return value;}catch{}
+    return {};
+  }
   function element(tag,attributes={},text){const node=document.createElementNS(NS,tag);for(const [key,value]of Object.entries(attributes))node.setAttribute(key,String(value));if(text!==undefined)node.textContent=text;return node;}
   class Graph {
     constructor(now=Date.now){
       this.now=now;this.data=null;this.error=null;this.pending=null;this.abort=null;this.sequence=0;this.loadedAt=0;this.selected=-1;this.followToday=true;
-      let saved={};try{saved=JSON.parse(localStorage.getItem('tc06-graph-v1')||'{}');}catch{}
+      const saved=savedSettings('tc06-graph-v1');
       const query=new URLSearchParams(location.search);
       this.minutes=Number(query.get('minutes')||saved.minutes||1);if(![1,5,10].includes(this.minutes))this.minutes=1;
       this.span=Number(query.get('span')||saved.span||360);if(![60,360,1440].includes(this.span))this.span=360;
@@ -34,7 +38,7 @@
     }
     setupOptions(){
       const defaults={axis:'auto',min:null,max:null,reference:false,target:null,low:null,high:null};
-      let saved;try{saved=JSON.parse(localStorage.getItem('tc06-graph-view-v1')||'null');}catch{}
+      const saved=savedSettings('tc06-graph-view-v1');
       this.options=this.validOptions(saved)?saved:defaults;
       const fields={axis:'axis-mode',min:'axis-min',max:'axis-max',target:'target-value',low:'reference-min',high:'reference-max'};
       for(const [key,id]of Object.entries(fields))$(id).value=this.options[key]??'';

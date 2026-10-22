@@ -10,6 +10,15 @@ const MAX_BODY = 2_000_000;
 const recordKey = record => `records/${dayKST(record.captured_at)}/${record.id}`;
 const rank = record => `${record.captured_at}|${record.recorded_at}|${record.id}`;
 
+function csvCell(value, numeric = false) {
+  if (numeric && typeof value === 'number' && Number.isFinite(value)) return String(value);
+  let text = String(value ?? '');
+  // Spreadsheet applications may execute formula-like text even inside CSV quotes.
+  // Prefix only the exported text; keep stored records and actual numbers intact.
+  if (/^(?:[\t\r\n]|[\s\u0000-\u001f]*[=+\-@])/.test(text)) text = "'" + text;
+  return '"' + text.replace(/"/g, '""') + '"';
+}
+
 function json(data, status = 200, extra = {}) {
   return new Response(JSON.stringify(data), { status, headers: {
     'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store',
@@ -169,7 +178,8 @@ export function createAPI(getStore) {
         }
         records.sort((a, b) => rank(a).localeCompare(rank(b)));
         const columns = ['id', 'asset', 'device_id', 'captured_at', 'recorded_at', 'received_at', 'value_c', 'status', 'source_clock', 'confidence'];
-        const csv = '\uFEFF' + [columns.join(','), ...records.map(row => columns.map(key => JSON.stringify(String(row[key] ?? ''))).join(','))].join('\r\n');
+        const numericColumns = new Set(['value_c', 'confidence']);
+        const csv = '\uFEFF' + [columns.join(','), ...records.map(row => columns.map(key => csvCell(row[key], numericColumns.has(key))).join(','))].join('\r\n');
         return new Response(csv, { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Disposition': `attachment; filename="TC06-${day}-KST.csv"` } });
       }
       return json({ error: 'Not found' }, 404);

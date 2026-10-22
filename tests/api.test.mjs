@@ -17,6 +17,28 @@ async function fixture() {
   return {store,api,cookie:''};
 }
 
+// Read CSV cells independently of JSON escaping, including quoted line breaks.
+function csvRows(csv) {
+  const rows=[],row=[];let field='',quoted=false;
+  const text=csv.replace(/^\uFEFF/,'');
+  for(let i=0;i<text.length;i++) {
+    const char=text[i];
+    if(quoted) {
+      if(char==='"'&&text[i+1]==='"'){field+='"';i++;}
+      else if(char==='"')quoted=false;
+      else field+=char;
+    } else if(char==='"')quoted=true;
+    else if(char===','){row.push(field);field='';}
+    else if(char==='\r'||char==='\n') {
+      if(char==='\r'&&text[i+1]==='\n')i++;
+      row.push(field);rows.push([...row]);row.length=0;field='';
+    } else field+=char;
+  }
+  assert.equal(quoted,false,'CSV must close every quoted cell');
+  row.push(field);rows.push(row);
+  return rows;
+}
+
 test('viewing and uploading work without keys, login or cookies',async()=>{
   const {api}=await fixture();
   assert.equal((await api(req('latest'))).status,200);
@@ -69,6 +91,58 @@ test('KST history is public and dates outside 30-day retention are rejected',asy
   assert.ok((await(await api(req('history?day='+day))).text()).includes(row.id));
   assert.equal((await api(req('history?day=2020-01-01'))).status,410);
   assert.equal((await api(req('history?day=2026-02-31'))).status,400);
+});
+test('history CSV round-trips normal and failed records with quotes and line breaks',async()=>{
+  const {store,api}=await fixture(),at=new Date().toISOString();
+  const sameDay=extra=>record(0,{captured_at:at,recorded_at:at,...extra});
+  const rows=[sameDay({value_c:-12.3}),sameDay({status:'ocr_failed',value_c:null,confidence:0,source_clock:'12:"34'}),
+    sameDay({status:'ocr_failed',value_c:null,confidence:0,source_clock:'a,b\r\nc\nd'})];
+  for(const row of rows)assert.equal((await api(req('ingest',{method:'POST',body:{record:row}}))).status,200);
+  const day=new Date(Date.parse(rows[0].captured_at)+9*3600000).toISOString().slice(0,10);
+  const response=await api(req('history?day='+day));
+  assert.equal(response.status,200);
+  assert.equal(response.headers.get('Content-Type'),'text/csv; charset=utf-8');
+  assert.equal(response.headers.get('Content-Disposition'),`attachment; filename="TC06-${day}-KST.csv"`);
+  const bytes=new Uint8Array(await response.arrayBuffer());
+  assert.deepEqual([...bytes.slice(0,3)],[239,187,191]);
+  const csv=new TextDecoder().decode(bytes),[columns,...exported]=csvRows(csv);
+  assert.deepEqual(columns,['id','asset','device_id','captured_at','recorded_at','received_at','value_c','status','source_clock','confidence']);
+  assert.equal(exported.length,rows.length);
+  for(const cells of exported) {
+    assert.equal(cells.length,columns.length);
+    const output=Object.fromEntries(columns.map((key,i)=>[key,cells[i]]));
+    const input=rows.find(row=>row.id===output.id);
+    assert.ok(input);
+    const stored=await store.get(`records/${day}/${input.id}`,{type:'json'});
+    for(const key of columns)assert.equal(output[key],String(stored[key]??''));
+    assert.equal(stored.source_clock,input.source_clock);
+  }
+  assert.ok(csv.includes('"12:""34"'));
+  assert.ok(csv.includes('"a,b\r\nc\nd"'));
+  assert.ok(csv.includes(',-12.3,'),'negative temperatures remain numeric');
+});
+test('history CSV neutralizes formula-like text without altering stored or numeric values',async()=>{
+  const {store,api}=await fixture(),at=new Date().toISOString();
+  const cases=[['=1+1',"'=1+1"],['+1+1',"'+1+1"],['-1+1',"'-1+1"],['@SUM(1,2)',"'@SUM(1,2)"],
+    ['\t=1+1',"'\t=1+1"],['\r=1+1',"'\r=1+1"],['\n=1+1',"'\n=1+1"],['  =1+1',"'  =1+1"],
+    ['\tplain',"'\tplain"],['plain\ttext','plain\ttext'],["'=1+1","'=1+1"]];
+  const rows=cases.map(([source_clock])=>record(0,{captured_at:at,recorded_at:at,device_id:'-fixture',status:'ocr_failed',value_c:null,confidence:0,source_clock}));
+  const normal=record(0,{captured_at:at,recorded_at:at,device_id:'-numeric-fixture',value_c:-123.4,confidence:60});rows.push(normal);
+  for(const row of rows)assert.equal((await api(req('ingest',{method:'POST',body:{record:row}}))).status,200);
+  const day=new Date(Date.parse(normal.captured_at)+9*3600000).toISOString().slice(0,10);
+  const response=await api(req('history?day='+day));assert.equal(response.status,200);
+  const [columns,...exported]=csvRows(await response.text());
+  const byId=new Map(exported.map(cells=>[cells[0],Object.fromEntries(columns.map((key,i)=>[key,cells[i]]))]));
+  for(const [index,[source_clock,expected]]of cases.entries()) {
+    const input=rows[index],output=byId.get(input.id);
+    assert.equal(output.source_clock,expected);
+    assert.equal(output.device_id,"'-fixture");
+    assert.equal(output.value_c,'');assert.equal(output.confidence,'0');
+    assert.equal((await store.get(`records/${day}/${input.id}`,{type:'json'})).source_clock,source_clock);
+  }
+  assert.equal(byId.get(normal.id).value_c,'-123.4');
+  assert.equal(byId.get(normal.id).confidence,'60');
+  assert.equal(byId.get(normal.id).device_id,"'-numeric-fixture");
 });
 test('legacy audio submissions are ignored and only record text is stored',async()=>{
   const {store,api}=await fixture();

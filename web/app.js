@@ -57,6 +57,7 @@ function render(){
   if((uncertain||loading)&&enabled){if(changed||voice.playing)voice.cancel();byId('audio-status').textContent=(loading?'온도 확인 중':age)+' · 음성 안내 대기';}
   else if(changed&&['held','estimated','loading'].includes(lastKind)&&enabled){byId('audio-status').textContent=valid?'최신 실측값 수신 · 다음 주기부터 음성 안내를 재개합니다.':'수신 이력 없음 · 기본 표시값임을 먼저 안내합니다.';}
   byId('speech-start').disabled=enabled;byId('speech-stop').disabled=!enabled;byId('display-speech').textContent=enabled?'음성 중지':'음성 시작';
+  updateHistoryBounds();
   lastKind=view.kind;
 }
 function refresh(){
@@ -65,6 +66,13 @@ function refresh(){
     try{const response=await fetch('/api/latest',{cache:'no-store',signal:controller.signal});if(!response.ok)throw Error('server');const data=await response.json();if(!Number.isFinite(Date.parse(data.server_now)))throw Error('time');latest=data.record;serverEstimate=data.estimate||null;serverOffset=Date.parse(data.server_now)-Date.now();rememberNormal(data.last_good);rememberNormal(latest);networkOK=true;byId('updated').textContent=`조회 ${formatTime(data.server_now)}`;}
     catch{networkOK=false;}finally{clearTimeout(timeout);lookupDone=true;render();}
   })().finally(()=>{refreshPromise=null;});return refreshPromise;
+}
+async function manualRefresh(){
+  const buttons=['refresh-latest','display-refresh'].map(byId),labels=buttons.map(button=>button.textContent);
+  for(const button of buttons){button.disabled=true;button.textContent='재조회 중…';}
+  for(const id of ['refresh-status','display-refresh-status']){byId(id).textContent='최신 온도를 다시 조회하고 있습니다…';byId(id).dataset.state='loading';}
+  try{await refresh();for(const id of ['refresh-status','display-refresh-status']){byId(id).textContent=networkOK?'재조회 완료 · 자동 조회는 1분마다 계속됩니다.':'재조회 실패 · 인터넷 연결을 확인해 주세요. 자동 조회는 1분마다 다시 시도합니다.';byId(id).dataset.state=networkOK?'success':'error';}}
+  finally{buttons.forEach((button,index)=>{button.disabled=false;button.textContent=labels[index];});}
 }
 async function announce(){
   if(!enabled||announcing||document.hidden)return;announcing=true;
@@ -86,19 +94,75 @@ async function start(){
 function stop(){enabled=false;voice.cancel();byId('audio-status').textContent='음성 안내가 꺼져 있습니다.';render();}
 async function fullscreen(mode='display'){if(typeof mode!=='string')mode='display';setMode(mode);try{if(!document.fullscreenElement)await document.documentElement.requestFullscreen();}catch{byId('audio-status').textContent='브라우저 메뉴에서 전체 화면을 선택해 주세요.';}}
 function setMode(mode,save=true){document.activeElement?.blur();document.body.dataset.mode=mode;byId('graph-screen').hidden=mode!=='graph';if(mode==='normal')byId('temperature').style.fontSize='';byId('display-menu').hidden=true;clearTimeout(menuTimer);if(save){const url=new URL(location.href);url.searchParams.set('mode',mode);history.replaceState(null,'',url);}fitNumber();if(mode==='graph'){graph?.draw();graph?.load();}}
-function revealMenu(){if(document.body.dataset.mode!=='display')return;byId('display-menu').hidden=false;clearTimeout(menuTimer);menuTimer=setTimeout(()=>{byId('display-menu').hidden=true;},5000);}
+function revealMenu(focusFirst=false){
+  if(document.body.dataset.mode!=='display')return;
+  const menu=byId('display-menu');menu.hidden=false;clearTimeout(menuTimer);
+  if(focusFirst&&!menu.contains(document.activeElement))menu.querySelector('button:not(:disabled)')?.focus();
+  menuTimer=setTimeout(()=>{if(!menu.contains(document.activeElement))menu.hidden=true;},5000);
+}
 function applySettings(){for(const key of ['volume','interval','color','size'])byId(key).value=settings[key];byId('custom-color').value=settings.customColor;byId('custom-color').hidden=settings.color!=='custom';voice.setVolume(settings.volume);const palette=settings.color==='custom'?{fg:settings.customColor,bg:'#000000'}:PALETTES[settings.color];document.documentElement.style.setProperty('--display-color',palette.fg);document.documentElement.style.setProperty('--display-bg',palette.bg);fitNumber();}
 function openSettings(){setMode('normal');byId('settings-panel').open=true;byId('settings-panel').scrollIntoView({block:'start'});byId('volume').focus();}
 for(const id of ['settings-open','graph-settings','display-settings'])byId(id).addEventListener('click',openSettings);
 byId('settings-panel').addEventListener('toggle',()=>byId('settings-open').setAttribute('aria-expanded',String(byId('settings-panel').open)));
 for(const key of ['volume','interval','color','size'])byId(key).addEventListener('input',()=>{settings[key]=key==='color'?byId(key).value:Number(byId(key).value);try{localStorage.setItem('tc06-settings-v2',JSON.stringify(settings));}catch{}if(key==='interval')nextAnnouncement=Date.now()+settings.interval*1000;applySettings();});
 byId('custom-color').addEventListener('input',()=>{settings.customColor=byId('custom-color').value;settings.color='custom';try{localStorage.setItem('tc06-settings-v2',JSON.stringify(settings));}catch{}applySettings();});
+for(const id of ['refresh-latest','display-refresh'])byId(id).addEventListener('click',manualRefresh);
 byId('speech-start').addEventListener('click',start);byId('speech-stop').addEventListener('click',stop);byId('display-speech').addEventListener('click',()=>enabled?stop():start());
 byId('fullscreen').addEventListener('click',fullscreen);byId('display-fullscreen').addEventListener('click',fullscreen);
 byId('display-mode').addEventListener('click',()=>{setMode('display');fullscreen();});byId('normal-mode').addEventListener('click',()=>setMode('normal'));
 byId('graph-mode').addEventListener('click',()=>setMode('graph'));byId('display-to-graph').addEventListener('click',()=>setMode('graph'));byId('graph-to-display').addEventListener('click',()=>setMode('display'));byId('graph-to-normal').addEventListener('click',()=>setMode('normal'));byId('graph-fullscreen').addEventListener('click',()=>fullscreen('graph'));byId('graph-speech').addEventListener('click',()=>enabled?stop():start());
-document.addEventListener('pointerdown',revealMenu);document.addEventListener('keydown',event=>{if(event.key==='Escape')setMode('normal');else if(['Enter','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Tab'].includes(event.key))revealMenu();});window.addEventListener('resize',fitNumber);document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&['display','graph'].includes(document.body.dataset.mode))setMode('normal');});
-byId('history-day').value=new Date(Date.now()+9*3600000).toISOString().slice(0,10);byId('download').addEventListener('click',()=>{location.href='/api/history?day='+encodeURIComponent(byId('history-day').value);});
+byId('display-menu').addEventListener('focusout',event=>{if(!byId('display-menu').contains(event.relatedTarget))revealMenu();});
+document.addEventListener('pointerdown',()=>revealMenu());document.addEventListener('keydown',event=>{
+  if(event.key==='Escape'){setMode('normal');return;}
+  if(document.body.dataset.mode!=='display')return;
+  const menu=byId('display-menu');
+  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Home','End'].includes(event.key)){
+    event.preventDefault();
+    const buttons=Array.from(menu.querySelectorAll('button:not(:disabled)')),index=buttons.indexOf(document.activeElement);
+    revealMenu(true);if(!buttons.length)return;
+    const next=event.key==='Home'?0:event.key==='End'?buttons.length-1:index<0?0:(index+(['ArrowLeft','ArrowUp'].includes(event.key)?-1:1)+buttons.length)%buttons.length;
+    buttons[next].focus();
+  }else if(event.key==='Enter'){
+    if(menu.hidden||!menu.contains(document.activeElement)){event.preventDefault();revealMenu(true);}else revealMenu();
+  }else if(event.key==='Tab')revealMenu();
+});window.addEventListener('resize',fitNumber);document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&['display','graph'].includes(document.body.dataset.mode))setMode('normal');});
+function updateHistoryBounds(){
+  const now=Date.now()+serverOffset,input=byId('history-day');
+  input.min=new Date(now-29*86400000+9*3600000).toISOString().slice(0,10);
+  input.max=new Date(now+9*3600000).toISOString().slice(0,10);
+  if(!historyDateSelected)input.value=input.max;
+}
+let historyPending=false,historyDateSelected=false;
+function historyMessage(message,state='ready'){byId('history-status').textContent=message;byId('history-status').dataset.state=state;}
+async function downloadHistory(){
+  if(historyPending)return;
+  updateHistoryBounds();
+  const input=byId('history-day'),date=input.value;
+  if(!date||!input.checkValidity()){
+    historyMessage(`기록 일자를 ${input.min}부터 ${input.max} 사이에서 선택해 주세요.`,'error');input.focus();return;
+  }
+  historyPending=true;byId('download').disabled=true;byId('download').textContent='다운로드 준비 중…';
+  historyMessage(`${date} 기록을 불러오는 중입니다…`,'loading');
+  const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000);
+  try{
+    const response=await fetch('/api/history?day='+encodeURIComponent(date),{cache:'no-store',signal:controller.signal});
+    if(!response.ok){
+      let message='기록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
+      try{const body=await response.json();if(typeof body.error==='string')message=body.error;}catch{}
+      throw Error(message);
+    }
+    if(!response.headers.get('Content-Type')?.toLowerCase().startsWith('text/csv'))throw Error('CSV 응답을 확인할 수 없습니다. 다시 시도해 주세요.');
+    const blob=await response.blob(),url=URL.createObjectURL(blob),link=document.createElement('a');
+    link.href=url;link.download=`TC06-${date}-KST.csv`;document.body.append(link);link.click();link.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+    historyMessage(`${date} 기록 다운로드를 시작했습니다.`,'success');
+  }catch(error){
+    historyMessage(error.name==='AbortError'?'기록 조회 시간이 초과됐습니다. 다시 시도해 주세요.':error instanceof TypeError?'인터넷 연결을 확인하고 CSV 다운로드를 다시 눌러 주세요.':error.message,'error');
+  }finally{clearTimeout(timeout);historyPending=false;byId('download').disabled=false;byId('download').textContent='CSV 다운로드';}
+}
+updateHistoryBounds();
+byId('history-day').addEventListener('input',()=>{historyDateSelected=true;if(!historyPending)historyMessage('한국시간 기준 오늘을 포함한 최근 30일의 기록을 받을 수 있습니다.');});
+byId('download').addEventListener('click',downloadHistory);
 document.addEventListener('visibilitychange',()=>{if(document.hidden){voice.cancel();}else{refresh();graph?.load();}});window.addEventListener('offline',()=>{networkOK=false;lookupDone=true;render();});window.addEventListener('online',()=>{refresh();graph?.load(true);});
 setInterval(()=>{if(!document.hidden){refresh();graph?.load();}},60000);setInterval(()=>{render();if(enabled&&Date.now()>=nextAnnouncement){nextAnnouncement=Date.now()+settings.interval*1000;announce();}},1000);
 graph=new TC06Graph.Graph(()=>Date.now()+serverOffset);

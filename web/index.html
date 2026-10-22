@@ -13,7 +13,8 @@
       <div class="temperature"><span id="temperature">—</span><span class="unit">℃</span></div>
       <p id="reading-age" class="reading-age">마지막 실측 확인 중</p><p id="status" role="status">온도를 불러오는 중입니다.</p>
       <div class="metadata"><div><span>마지막 판독</span><strong id="captured">—</strong></div><div><span>서버 저장</span><strong id="received">—</strong></div><div><span>다음 음성 안내</span><strong id="countdown">꺼짐</strong></div></div>
-      <div class="controls"><button id="speech-start">음성 안내 시작</button><button id="speech-stop" class="secondary" disabled>안내 중지</button><button id="display-mode" class="secondary">숫자 화면</button><button id="graph-mode" class="secondary">온도 그래프</button><button id="settings-open" class="secondary" aria-controls="settings-panel" aria-expanded="false">설정</button><button id="fullscreen" class="secondary">전체 화면</button></div>
+      <div class="controls"><button id="speech-start">음성 안내 시작</button><button id="speech-stop" class="secondary" disabled>안내 중지</button><button id="display-mode" class="secondary">숫자 화면</button><button id="graph-mode" class="secondary">온도 그래프</button><button id="settings-open" class="secondary" aria-controls="settings-panel" aria-expanded="false">설정</button><button id="fullscreen" class="secondary">전체 화면</button><button id="refresh-latest" class="secondary" aria-describedby="refresh-status">지금 새로고침</button></div>
+      <p id="refresh-status" class="note" role="status">온도는 1분마다 자동 조회합니다.</p>
       <p id="audio-status" class="note" role="status">음성 안내 시작을 누르면 웹 숫자 TTS가 1분마다 안내합니다. 운영체제의 한국어 음성 설치는 필요 없습니다.</p>
       <details id="settings-panel" class="settings"><summary>화면 · 음성 설정</summary><p class="note">이 브라우저에 저장됩니다. 색상과 숫자 크기는 숫자 전용 화면에 적용됩니다.</p><div class="settings-grid">
         <label>음량<input id="volume" aria-label="음량" type="range" min="0" max="1" value="0.8" step="0.05"></label>
@@ -22,7 +23,7 @@
         <label>숫자 화면 숫자 크기<input id="size" aria-label="숫자 크기" type="range" min="50" max="100" value="90" step="5"></label>
       </div></details>
       <details id="policy-panel"><summary>표시 정책 · 사용 안내</summary><p class="note">실측값은 최근 수신한 실제 판독값입니다. 짧은 OCR 실패는 안정적인 최근 실측 3~5개로 마지막 실측 후 최대 2분까지만 추정하며 ≈ 표시를 붙입니다. 추정 조건이 맞지 않거나 시간이 지나면 마지막 정상값과 경과 시간을 표시합니다. 추정·과거 값은 현재 온도로 읽지 않도록 음성 안내가 대기합니다. 보관된 실측 이력이 없을 때만 기본 표시값 38도를 사용하며 음성에서도 기본값임을 먼저 알립니다.</p><p class="note">실측·실패 원본 기록과 CSV는 유지합니다. 추정은 실측 봉·최저/최고 통계에 포함하지 않습니다. 숫자 화면은 터치·Enter로 메뉴를 열고 Esc로 일반 화면으로 돌아옵니다. 음성과 전체 화면은 처음 한 번 조작이 필요합니다.</p></details>
-      <p id="retention-status" class="note">최근 30일 보관 (한국날짜 기준) · 매시 15분 자동 삭제 · 서버에는 온도 텍스트만 저장</p><details><summary>기록 다운로드</summary><div class="history"><label>기록 일자 (한국시간)<input id="history-day" type="date"></label><button id="download" class="secondary">CSV 다운로드</button></div><p class="note">영상에서 읽은 참고 표시값입니다. 운전·보호 판단은 기존 HMI에서 확인하세요.</p></details>
+      <p id="retention-status" class="note">최근 30일 보관 (한국날짜 기준) · 매시 15분 자동 삭제 · 서버에는 온도 텍스트만 저장</p><details id="history-panel"><summary>기록 다운로드</summary><div class="history"><label>기록 일자 (한국시간)<input id="history-day" type="date" aria-describedby="history-status" required></label><button id="download" class="secondary" aria-describedby="history-status">CSV 다운로드</button></div><p id="history-status" class="note" role="status">한국시간 기준 오늘을 포함한 최근 30일의 기록을 받을 수 있습니다.</p><p class="note">영상에서 읽은 참고 표시값입니다. 운전·보호 판단은 기존 HMI에서 확인하세요.</p></details>
     </section>
     <footer><a href="/updates.html">수집기 업데이트</a><span>1분 간격 저장 · 한국시간 표시</span><span id="updated">첫 조회 대기</span></footer>
   </main>
@@ -46,7 +47,7 @@
     <svg id="quality-chart" role="img" aria-label="온도 축과 분리한 판독 상태. 그래프와 같은 시간 구간입니다."></svg>
     <div id="graph-detail" aria-live="polite">그래프를 누르거나 좌우 방향키로 상세를 확인하세요.</div><p id="graph-status" role="status">저장 이력 대기 · 기본값 38도는 그래프에 넣지 않습니다.</p>
   </section>
-  <nav id="display-menu" aria-label="디스플레이 메뉴" hidden><button id="normal-mode">일반 화면</button><button id="display-settings" class="secondary">설정</button><button id="display-to-graph" class="secondary">그래프</button><button id="display-speech" class="secondary">음성 시작</button><button id="display-fullscreen" class="secondary">전체 화면</button></nav>
+  <nav id="display-menu" aria-label="디스플레이 메뉴" hidden><button id="normal-mode">일반 화면</button><button id="display-settings" class="secondary">설정</button><button id="display-to-graph" class="secondary">그래프</button><button id="display-speech" class="secondary">음성 시작</button><button id="display-fullscreen" class="secondary">전체 화면</button><button id="display-refresh" class="secondary">지금 새로고침</button><p id="display-refresh-status" role="status">방향키로 이동 · 확인 버튼으로 선택</p></nav>
   <p id="display-state" role="status">불러오는 중</p>
   <p id="display-held" role="status" hidden></p>
 </body>

@@ -2,11 +2,15 @@
 
 윈도우 PC의 HMI 영상에서 **TC-06 표시 온도**를 읽고, **1분마다 서버에 저장**합니다. 현장 TV 브라우저에서는 온도를 크게 표시하고 한국어 여성 음성으로 **“현재 온도는 … 도입니다.”**를 1분마다 안내합니다.
 
-**웹/API · Windows 수집기 0.6.0.** Python·OCR 엔진을 포함한 Windows 설치판을 제공합니다. 실제 장치·고온 HMI·TV 재생과 빌드/설치 자동 검사는 [검증 문서](docs/VERIFICATION.md)에서 구분합니다.
+**웹/API · Windows 수집기 0.6.1.** Python·OCR 엔진을 포함한 Windows 설치판을 제공합니다. 실제 장치·고온 HMI·TV 재생과 빌드/설치 자동 검사는 [검증 문서](docs/VERIFICATION.md)에서 구분합니다.
 
 ## Windows에서 설치해 사용
 
-[v0.6.0 릴리스](https://github.com/esp6662266/tc06-temperature-monitor/releases/tag/v0.6.0)의 **TC06Monitor-Setup-0.6.0-x64.exe**를 받습니다. Windows 10/11 x64 대상이며 Python·Tesseract·영문 데이터 설치가 따로 필요 없습니다. 바탕화면의 TC-06 Monitor를 열고 영상 입력만 설정하세요. [설치 안내](docs/WINDOWS_INSTALL.md)를 참고하세요. 캡처보드 드라이버는 장치에 따라 필요합니다.
+[v0.6.1 릴리스](https://github.com/esp6662266/tc06-temperature-monitor/releases/tag/v0.6.1)의 **TC06Monitor-Setup-0.6.1-x64.exe**를 받습니다. Windows 10/11 x64 대상이며 Python·Tesseract·영문 데이터 설치가 따로 필요 없습니다. 바탕화면의 TC-06 Monitor를 열고 영상 입력만 설정하세요. [설치 안내](docs/WINDOWS_INSTALL.md)를 참고하세요. 캡처보드 드라이버는 장치에 따라 필요합니다.
+
+## 업로드 실패 재시도 (0.6.1)
+
+서버 업로드 실패 시 30초를 기다린 뒤 다시 전송합니다. 정상 온도 저장은 약 60초 간격이며 영상 판독 재시도와 원격 업데이트 상태 확인 주기는 그대로입니다. 이 변경은 Windows 수집기에 적용되므로 웹 새로고침만으로 기존 설치판의 재시도 주기가 바뀌지 않습니다. 현장 PC 설치·업데이트는 별도입니다.
 
 ## OCR 복구와 원격 업데이트
 

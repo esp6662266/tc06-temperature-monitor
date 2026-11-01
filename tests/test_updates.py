@@ -25,7 +25,7 @@ def signing(monkeypatch):
     return sign
 
 
-def release(signing, extra=None, version='0.6.1'):
+def release(signing, extra=None, version='0.6.2'):
     buffer = io.BytesIO()
     files = {'TC06Monitor.exe': b'SYNTHETIC NOT EXECUTABLE', 'ocr/tesseract.exe': b'synthetic', 'ocr/tessdata/eng.traineddata': b'synthetic'}
     files.update(extra or {})
@@ -42,8 +42,8 @@ def release(signing, extra=None, version='0.6.1'):
 
 def test_signature_tampering_origin_and_downgrade(signing):
     envelope, raw, data = release(signing)
-    assert updates.verify_manifest(envelope)['version'] == '0.6.1'
-    with pytest.raises(ValueError): updates.verify_manifest(envelope, '0.6.1')
+    assert updates.verify_manifest(envelope)['version'] == '0.6.2'
+    with pytest.raises(ValueError): updates.verify_manifest(envelope, '0.6.2')
     envelope['payload'] = base64.b64encode(b'{"version":"9.9.9"}').decode()
     with pytest.raises(Exception): updates.verify_manifest(envelope)
     data['url'] = 'https://evil.example/payload.zip'
@@ -66,7 +66,7 @@ def test_verified_stage_preserves_history_and_does_not_overwrite_existing(signin
 def test_unsafe_archives_never_touch_existing_install(signing, tmp_path, path):
     envelope, raw, _ = release(signing, {path: b'x'})
     with pytest.raises(ValueError): updates.stage_release(envelope, tmp_path, opener=lambda url: io.BytesIO(raw))
-    assert not (tmp_path/'updates'/'versions'/'0.6.1').exists()
+    assert not (tmp_path/'updates'/'versions'/'0.6.2').exists()
     assert not (tmp_path/'escape.exe').exists()
 
 
@@ -76,12 +76,12 @@ def test_incomplete_or_corrupt_download_is_removed(signing, tmp_path, truncate):
     corrupt = raw[:-1] if truncate else b'X' + raw[1:]
     with pytest.raises(ValueError): updates.stage_release(envelope, tmp_path, opener=lambda url: io.BytesIO(corrupt))
     assert not list((tmp_path/'updates').glob('*.part'))
-    assert not (tmp_path/'updates'/'versions'/'0.6.1').exists()
+    assert not (tmp_path/'updates'/'versions'/'0.6.2').exists()
 
 
 def job(tmp_path):
-    return {'command_id': str(uuid.uuid4()), 'executable': str(tmp_path/'updates'/'versions'/'0.6.1'/'TC06Monitor.exe'),
-            'version': '0.6.1', 'previous_executable': str(tmp_path/'installed'/'TC06Monitor.exe'),
+    return {'command_id': str(uuid.uuid4()), 'executable': str(tmp_path/'updates'/'versions'/'0.6.2'/'TC06Monitor.exe'),
+            'version': '0.6.2', 'previous_executable': str(tmp_path/'installed'/'TC06Monitor.exe'),
             'parent_pid': 123, 'stopped_at': time.time()}
 
 
@@ -148,8 +148,8 @@ def test_restarted_candidate_reports_switching_then_reads_final_result(tmp_path,
 
 
 def test_newer_manual_installer_never_launches_an_older_cached_version(tmp_path):
-    exe=tmp_path/'updates'/'versions'/'0.6.1'/'TC06Monitor.exe';exe.parent.mkdir(parents=True);exe.write_bytes(b'fixture')
-    updates.atomic_json(tmp_path/'updates'/'active.json', {'executable':str(exe),'version':'0.6.1'})
+    exe=tmp_path/'updates'/'versions'/'0.6.2'/'TC06Monitor.exe';exe.parent.mkdir(parents=True);exe.write_bytes(b'fixture')
+    updates.atomic_json(tmp_path/'updates'/'active.json', {'executable':str(exe),'version':'0.6.2'})
     assert active_executable(tmp_path, installed_version='0.7.0') is None
     assert active_executable(tmp_path, installed_version='0.6.0')==exe
 

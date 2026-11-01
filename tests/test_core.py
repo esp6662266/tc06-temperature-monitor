@@ -91,3 +91,48 @@ def test_text_only_uploader_acknowledges_expired_record_without_retry(tmp_path, 
     assert box.count_pending() == 0
     assert events[0]["retention_dropped"] is True
     box.close()
+
+
+@pytest.mark.parametrize('outcome,expected_wait,pending', [
+    ('http_error', 30, 1), ('connection_error', 30, 1),
+    ('unconfirmed', 30, 1), ('saved', 3, 0), ('empty', 3, 0),
+])
+def test_uploader_retries_failed_upload_after_30_seconds_and_preserves_queue(
+        tmp_path, monkeypatch, outcome, expected_wait, pending):
+    import io
+    import threading
+    import urllib.error
+    from tc06.worker import Monitor
+    box = Outbox(tmp_path / 'history.sqlite3')
+    row = make_record({'status': 'ocr_failed'}, 'synthetic-pc')
+    if outcome != 'empty':
+        box.add(row)
+    box.close()
+    monitor = Monitor({'server_url': 'https://example.test'}, tmp_path, lambda event: None)
+    calls, waits = [], []
+
+    class StopAfterWait(threading.Event):
+        def wait(self, seconds):
+            waits.append(seconds)
+            self.set()
+
+    monitor.stop_event = StopAfterWait()
+
+    def response(request, timeout):
+        calls.append(request)
+        assert request.full_url == 'https://example.test/api/ingest'
+        assert request.get_method() == 'POST' and timeout == 15
+        assert json.loads(request.data) == {'record': row}
+        if outcome == 'http_error':
+            raise urllib.error.HTTPError(request.full_url, 503, 'Unavailable', {}, None)
+        if outcome == 'connection_error':
+            raise urllib.error.URLError('synthetic offline')
+        return io.BytesIO(json.dumps({'id': row['id'], 'saved': outcome == 'saved'}).encode())
+
+    monkeypatch.setattr('urllib.request.urlopen', response)
+    monitor._send()
+    assert len(calls) == (0 if outcome == 'empty' else 1)
+    assert waits == [expected_wait]
+    box = Outbox(tmp_path / 'history.sqlite3')
+    assert box.count_pending() == pending
+    box.close()

@@ -6,7 +6,7 @@ from pathlib import Path
 import time
 import uuid
 
-VERSION = "0.6.0"
+VERSION = "0.6.1"
 STATUS_TEXT = {
     "ok": "정상 판독", "source_error": "영상 캡처 실패", "window_missing": "창 없음·최소화",
     "ocr_timeout": "판독 시간 초과", "ocr_failed": "숫자 판독 실패",

@@ -165,7 +165,7 @@ class Monitor:
                         self.notify({"network_error": "서버 전송 실패: PC에 보관 중, 자동 재시도", "pending": box.count_pending()})
                         failed = True
                         break
-                self.stop_event.wait(15 if failed else 3)
+                self.stop_event.wait(30 if failed else 3)
         except Exception as error:
             logging.error("Uploader stopped (%s)", type(error).__name__)
             self.notify({"error": "전송 작업 중단: 로컬 저장소 또는 설정을 확인하세요"})

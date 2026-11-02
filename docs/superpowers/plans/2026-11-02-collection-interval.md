@@ -1,6 +1,6 @@
 # Collection Interval Implementation Plan
 
-> **Execution:** Follow the project instructions and existing user authorization. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Execution:** Follow the project instructions and existing user authorization. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Let the user set server recording and dashboard polling intervals on the homepage to reduce Netlify usage.
 
@@ -32,9 +32,9 @@
 
 **Interfaces:** `/api/settings` GET/POST `{interval_seconds,revision,updated_at}`; record optional `record_interval_seconds`, `collector_version`; `Recovery.set_interval(seconds)`; 300-second collector settings and idle update polling.
 
-- [ ] Add validation, revision conflict, applied-record metadata and offline/scheduling tests; run them.
-- [ ] Implement settings storage/cache, collector sync/cache, re-anchored recording schedule and compatible heartbeat expiry.
-- [ ] Run Python and Node suites.
+- [x] Add validation, revision conflict, applied-record metadata and offline/scheduling tests; run them.
+- [x] Implement settings storage/cache, collector sync/cache, re-anchored recording schedule and compatible heartbeat expiry.
+- [x] Run Python and Node suites.
 
 ### Task 2: Homepage and release
 
@@ -42,7 +42,11 @@
 
 **Interfaces:** `TC06Collection.observe(data)`, `.seconds`, `.label`; homepage form with custom seconds and expected records/day, separate saved/applied feedback.
 
-- [ ] Add browser tests for save/reload, validation/conflict/failure, reduced polling/voice, and small-screen layout.
-- [ ] Implement the form and interval-based polling with explicit manual refresh; update docs/version.
-- [ ] Run browser suite; inspect screenshots; build and inspect Windows artifacts with the existing workflow.
-- [ ] Publish the website and verified signed Windows release; confirm live setting reads and supported assets without synthetic production temperature uploads or installing on a field PC.
+- [x] Add browser tests for save/reload, validation/conflict/failure, reduced polling/voice, and small-screen layout.
+- [x] Implement the form and interval-based polling with explicit manual refresh; update docs/version.
+- [x] Run browser suite; inspect screenshots; build and inspect Windows artifacts with the existing workflow.
+- [x] Publish the website and verified signed Windows release; confirm live setting reads and supported assets without synthetic production temperature uploads or installing on a field PC.
+
+## Completed scope and evidence
+
+User selected 600 seconds. Website deployed and setting reread; supported Windows build verified and signed for release. Existing field PC installation remains a user action because no device is paired. Updated the active Mac MONSTAR DECK TC-06 helper to consume the site interval; nine tests, runtime 600-second scheduling, UI and preserved configuration hashes verified. Backup: parent workspace `output/tc06-collection-20261102/monstar`.

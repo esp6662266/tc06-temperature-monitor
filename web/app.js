@@ -19,6 +19,7 @@ settings.customColor=/^#[0-9a-f]{6}$/i.test(settings.customColor)?settings.custo
 settings.size=Math.max(50,Math.min(100,Number(settings.size)||90));
 let latest=null,serverOffset=0,networkOK=false,lookupDone=false,enabled=false,nextAnnouncement=0,announcing=false,refreshPromise=null;
 let menuTimer=null,graph=null;
+let lastLookupAt=0,nextAutoRefresh=Date.now()+60000,autoSeconds=60;
 let lastNormal=null,lastKind=null,serverEstimate=null;
 try{lastNormal=JSON.parse(localStorage.getItem('tc06-last-good-v1')||'null');}catch{}
 const labels={ocr_timeout:'판독 시간이 초과되어 다시 읽는 중입니다',anchor_missing:'TC-06을 찾을 수 없습니다',ambiguous_anchor:'TC-06 표시가 여러 개입니다',occluded:'온도 영역이 다른 창에 가려졌습니다',ocr_failed:'온도를 판독할 수 없습니다',value_suspect:'숫자 재확인이 필요합니다',low_confidence:'숫자가 선명하지 않습니다',freshness_unverified:'원본 시계의 진행을 확인 중입니다',stale_source:'원본 영상 정지가 의심됩니다',source_error:'영상 입력을 확인해 주세요',window_missing:'HMI 창을 확인해 주세요'};
@@ -63,7 +64,7 @@ function render(){
 function refresh(){
   if(refreshPromise)return refreshPromise;
   refreshPromise=(async()=>{const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),8000);
-    try{const response=await fetch('/api/latest',{cache:'no-store',signal:controller.signal});if(!response.ok)throw Error('server');const data=await response.json();if(!Number.isFinite(Date.parse(data.server_now)))throw Error('time');latest=data.record;serverEstimate=data.estimate||null;serverOffset=Date.parse(data.server_now)-Date.now();rememberNormal(data.last_good);rememberNormal(latest);networkOK=true;byId('updated').textContent=`조회 ${formatTime(data.server_now)}`;}
+    try{const response=await fetch('/api/latest',{cache:'no-store',signal:controller.signal});if(!response.ok)throw Error('server');const data=await response.json();if(!Number.isFinite(Date.parse(data.server_now)))throw Error('time');latest=data.record;serverEstimate=data.estimate||null;serverOffset=Date.parse(data.server_now)-Date.now();rememberNormal(data.last_good);rememberNormal(latest);networkOK=true;TC06Collection.observe(data);lastLookupAt=Date.now();byId('updated').textContent=`조회 ${formatTime(data.server_now)}`;}
     catch{networkOK=false;}finally{clearTimeout(timeout);lookupDone=true;render();}
   })().finally(()=>{refreshPromise=null;});return refreshPromise;
 }
@@ -71,13 +72,13 @@ async function manualRefresh(){
   const buttons=['refresh-latest','display-refresh'].map(byId),labels=buttons.map(button=>button.textContent);
   for(const button of buttons){button.disabled=true;button.textContent='재조회 중…';}
   for(const id of ['refresh-status','display-refresh-status']){byId(id).textContent='최신 온도를 다시 조회하고 있습니다…';byId(id).dataset.state='loading';}
-  try{await refresh();for(const id of ['refresh-status','display-refresh-status']){byId(id).textContent=networkOK?'재조회 완료 · 자동 조회는 1분마다 계속됩니다.':'재조회 실패 · 인터넷 연결을 확인해 주세요. 자동 조회는 1분마다 다시 시도합니다.';byId(id).dataset.state=networkOK?'success':'error';}}
+  try{await refresh();for(const id of ['refresh-status','display-refresh-status']){byId(id).textContent=networkOK?`재조회 완료 · 자동 조회는 ${TC06Collection.label}마다 계속됩니다.`:`재조회 실패 · 인터넷 연결을 확인해 주세요. 자동 조회는 ${TC06Collection.label}마다 다시 시도합니다.`;byId(id).dataset.state=networkOK?'success':'error';}}
   finally{buttons.forEach((button,index)=>{button.disabled=false;button.textContent=labels[index];});}
 }
 async function announce(){
   if(!enabled||announcing||document.hidden)return;announcing=true;
   try{
-    await refresh();if(!enabled)return;
+    if(!networkOK||Date.now()-lastLookupAt>=TC06Collection.seconds*1000)await refresh();if(!enabled)return;
     const view=readingView();if(['held','estimated','loading'].includes(view.kind)){byId('audio-status').textContent=`${view.kind==='estimated'?'추정값 · 마지막 실측':'마지막 정상값'} · ${ago(view.record)} 표시 중 · 음성 안내 대기`;return;}
     const valid=view.kind==='good',value=view.value;
     const played=await voice.say(value,settings.volume,view.kind);
@@ -164,7 +165,7 @@ updateHistoryBounds();
 byId('history-day').addEventListener('input',()=>{historyDateSelected=true;if(!historyPending)historyMessage('한국시간 기준 오늘을 포함한 최근 30일의 기록을 받을 수 있습니다.');});
 byId('download').addEventListener('click',downloadHistory);
 document.addEventListener('visibilitychange',()=>{if(document.hidden){voice.cancel();}else{refresh();graph?.load();}});window.addEventListener('offline',()=>{networkOK=false;lookupDone=true;render();});window.addEventListener('online',()=>{refresh();graph?.load(true);});
-setInterval(()=>{if(!document.hidden){refresh();graph?.load();}},60000);setInterval(()=>{render();if(enabled&&Date.now()>=nextAnnouncement){nextAnnouncement=Date.now()+settings.interval*1000;announce();}},1000);
+setInterval(()=>{const seconds=TC06Collection.seconds;if(seconds!==autoSeconds){autoSeconds=seconds;nextAutoRefresh=Date.now()+seconds*1000;}if(!document.hidden&&Date.now()>=nextAutoRefresh){nextAutoRefresh=Date.now()+seconds*1000;if(Date.now()-lastLookupAt>=seconds*1000)refresh();if(document.body.dataset.mode==='graph')graph?.load();}},1000);setInterval(()=>{render();if(enabled&&Date.now()>=nextAnnouncement){nextAnnouncement=Date.now()+settings.interval*1000;announce();}},1000);
 graph=new TC06Graph.Graph(()=>Date.now()+serverOffset);
 const initialMode=new URLSearchParams(location.search).get('mode');setMode(['normal','graph'].includes(initialMode)?initialMode:'display',false);applySettings();render();refresh();voice.preload().catch(()=>{});
 fetch('/api/retention',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(data=>{if(data?.last_cleanup)byId('retention-status').textContent=`최근 30일 보관 (한국날짜 기준) · 매시 15분 자동 삭제 · 최근 정리 ${formatTime(data.last_cleanup.ran_at)}`;}).catch(()=>{});

@@ -5,6 +5,17 @@ import { createUpdates, verifyRelease } from '../server/updates.mjs';
 import { MemoryStore } from '../server/memory-store.mjs';
 
 const admin='A'.repeat(43),deviceId='synthetic-pc';
+
+test('five-minute agents stay reachable between heartbeats while old agents retain short expiry',async()=>{
+ const s=setup(),token=await s.pair();await s.heartbeat(token,{heartbeat_seconds:300});
+ s.advance(301_000);
+ assert.equal((await(await s.call('admin/overview')).json()).devices[0].online,true);
+ assert.equal((await s.adminPost('command',{device_id:deviceId})).status,200);
+ s.advance(360_000);
+ assert.equal((await(await s.call('admin/overview')).json()).devices[0].online,false);
+ const legacy=setup(),old=await legacy.pair();await legacy.heartbeat(old);legacy.advance(61_000);
+ assert.equal((await(await legacy.call('admin/overview')).json()).devices[0].online,false);
+});
 function setup(adminCode=admin){
  const store=new MemoryStore();let time=Date.now();const keys=generateKeyPairSync('ed25519');
  const publicKey=keys.publicKey.export({format:'der',type:'spki'}).subarray(-32).toString('base64');

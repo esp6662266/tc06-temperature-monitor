@@ -55,7 +55,7 @@ test('cached page reloads offline and composes the fixed 38 voice in Web Audio',
 
 test('fullscreen from normal mode leaves only the large temperature',async({page})=>{
   await page.goto('/?mode=normal');await page.locator('#fullscreen').click();
-  await expect(page.locator('body')).toHaveAttribute('data-mode','display');await expect(page.locator('main > header')).toBeHidden();await expect(page.locator('#status')).toBeHidden();await expect(page.locator('.metadata')).toBeHidden();await expect(page.locator('.controls')).toBeHidden();await expect(page.locator('.settings')).toBeHidden();await expect(page.locator('.unit')).toBeHidden();await expect(page.locator('#display-menu')).toBeHidden();await expect(page.locator('#temperature')).toBeVisible();
+  await expect(page.locator('body')).toHaveAttribute('data-mode','display');await expect(page.locator('main > header')).toBeHidden();await expect(page.locator('#status')).toBeHidden();await expect(page.locator('.metadata')).toBeHidden();await expect(page.locator('.controls')).toBeHidden();for(const panel of await page.locator('.settings').all())await expect(panel).toBeHidden();await expect(page.locator('.unit')).toBeHidden();await expect(page.locator('#display-menu')).toBeHidden();await expect(page.locator('#temperature')).toBeVisible();
 });
 
 test('custom number color updates immediately and survives reload',async({page})=>{
@@ -163,7 +163,7 @@ test('API failure immediately drops forecasts and reload keeps only the real las
 test('forecasts never use the current-temperature voice and normal readings resume it',async({page})=>{
  let body=forecastSample();await page.route('**/api/latest',r=>r.fulfill({json:body}));await page.goto('/?mode=normal');await expect(page.locator('#temperature')).toHaveText('≈605.0');
  await page.evaluate(()=>{window.syntheticVoiceCalls=0;voice.say=async()=>{window.syntheticVoiceCalls++;return true;};});await page.locator('#speech-start').click();await expect(page.locator('#audio-status')).toContainText('음성 안내 대기');expect(await page.evaluate(()=>window.syntheticVoiceCalls)).toBe(0);
- body=sample({id:'recovered-forecast',value_c:606});await page.evaluate(()=>announce());await expect(page.locator('#temperature')).toHaveText('606.0');expect(await page.evaluate(()=>window.syntheticVoiceCalls)).toBe(1);await expect(page.locator('body')).toHaveAttribute('data-state','good');
+ body=sample({id:'recovered-forecast',value_c:606});await page.evaluate(()=>refresh());await page.evaluate(()=>announce());await expect(page.locator('#temperature')).toHaveText('606.0');expect(await page.evaluate(()=>window.syntheticVoiceCalls)).toBe(1);await expect(page.locator('body')).toHaveAttribute('data-state','good');
 });
 test('forecast graph uses dashed overlays and excludes estimates from candles and measured extrema',async({page})=>{
  const data=trendSample();const last=data.bars.at(-1);data.bars[data.bars.length-1]={...last,open:null,high:null,low:null,close:null,count:0,invalid_count:1};data.samples=59;data.invalid_samples=1;

@@ -72,7 +72,7 @@
           const data=await response.json();if(!response.ok)throw Error(data.error||'그래프 조회 실패');if(sequence!==this.sequence)return;
           this.error=null;this.data=data;this.key=key;this.loadedAt=Date.now();this.selected=data.bars.reduce((last,bar,index)=>bar.count?index:last,-1);
           $('graph-day').min=data.oldest_day;$('graph-day').max=day(Date.parse(data.server_now));
-          $('graph-status').textContent=`조회 ${stamp.format(new Date(data.server_now))} · 실측 ${data.samples.toLocaleString('ko-KR')}건 · 판독 실패 ${data.invalid_samples}건 · 추정 ${(data.estimates||[]).length}건 · 1분마다 갱신`;
+          $('graph-status').textContent=`조회 ${stamp.format(new Date(data.server_now))} · 실측 ${data.samples.toLocaleString('ko-KR')}건 · 판독 실패 ${data.invalid_samples}건 · 추정 ${(data.estimates||[]).length}건 · ${window.TC06Collection?.label||'1분'}마다 갱신`;
           this.draw();
         }catch(error){if(sequence===this.sequence){this.error=this.data?'조회 연결 실패 · 마지막 조회 '+stamp.format(new Date(this.data.server_now))+'의 그래프를 표시합니다. 새로고침으로 다시 확인하세요.':'저장 이력을 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침해 주세요.';$('graph-status').textContent=this.data?'연결 확인 필요 · 마지막 조회 그래프를 표시하고 있습니다.':this.error;this.draw();}}
         finally{clearTimeout(timeout);if(sequence===this.sequence){this.pending=null;this.pendingKey=null;}}

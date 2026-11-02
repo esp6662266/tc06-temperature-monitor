@@ -48,3 +48,6 @@ body[data-mode=display] #display-menu:not([hidden])~#display-held{visibility:hid
 .history{gap:12px}
 .history input{min-width:0;max-width:100%}
 @media(max-width:650px){.controls #refresh-latest{grid-column:1/-1}.history label{flex-wrap:wrap}#display-menu{max-width:calc(100vw - 24px)}}
+
+.collection-controls,.collection-presets{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}.collection-controls input{width:160px;max-width:100%}.collection-presets button{padding:8px 14px}#collection-applied,#collection-result{overflow-wrap:anywhere}#collection-form>label{display:block;margin-top:16px}#collection-limit{max-width:80ch}#collection-current{font-weight:700;color:var(--text)}
+@media(max-width:650px){.collection-controls{display:grid;grid-template-columns:1fr}.collection-controls input,.collection-controls button{width:100%}footer{flex-wrap:wrap}}

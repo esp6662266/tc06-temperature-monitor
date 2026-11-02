@@ -4,6 +4,7 @@ import { PUBLIC_KEY } from './update-trust.mjs';
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
 const UUID = /^[0-9a-f-]{36}$/;
 const STATES = new Set(['idle','downloading','ready','switching','completed','rolled_back','failed']);
+const onlineWindow = device => device.heartbeat_seconds===300?660_000:60_000;
 const REPO = 'https://github.com/esp6662266/tc06-temperature-monitor';
 const digest = value => createHash('sha256').update(value).digest('hex');
 const equal = (left, right) => timingSafeEqual(Buffer.from(digest(left)), Buffer.from(digest(right)));
@@ -85,7 +86,7 @@ export function createUpdates(getStore,{adminToken=()=>process.env.TC06_UPDATE_A
           const devices=[];
           for await(const page of store.list({prefix:'devices/',paginate:true}))for(const item of page.blobs||[]){
             const device=await store.get(item.key,{type:'json'});
-            if(device && !device.revoked){const {token_hash,...safe}=device;devices.push({...safe,online:time-device.seen_at<60_000});}
+            if(device && !device.revoked){const {token_hash,...safe}=device;devices.push({...safe,online:time-device.seen_at<onlineWindow(device)});}
           }
           return reply({devices,server_now:time});
         }
@@ -120,7 +121,7 @@ export function createUpdates(getStore,{adminToken=()=>process.env.TC06_UPDATE_A
         if(parts[3]==='command'){
           const commandId=randomUUID();
           const saved=await mutate(store,key,device=>{
-            if(!device||device.revoked||time-device.seen_at>=60_000)throw Error('Device is offline or not paired');
+            if(!device||device.revoked||time-device.seen_at>=onlineWindow(device))throw Error('Device is offline or not paired');
             if(!version(device.version)||!device.available)throw Error('No verified release available');
             const release=verifyRelease(device.available.envelope,publicKey);
             if(!newer(release.version,device.version))throw Error('Already on latest version');
@@ -159,7 +160,8 @@ export function createUpdates(getStore,{adminToken=()=>process.env.TC06_UPDATE_A
           if(input.available){const release=verifyRelease(input.available.envelope,publicKey);available={version:release.version,envelope:input.available.envelope};}
           const saved=await mutate(store,key,current=>{
             if(current.revoked||current.token_hash!==device.token_hash)throw Error('Device pairing changed');
-            const result={...current,seen_at:time,version:input.version,status:input.status};
+            const result={...current,seen_at:time,version:input.version,status:input.status,
+              heartbeat_seconds:input.heartbeat_seconds===300?300:15};
             if(input.result && input.command_id && input.result.command_id===input.command_id && current.command?.id===input.command_id &&
               Number.isFinite(input.result.gap_seconds) && input.result.gap_seconds>=0 && input.result.gap_seconds<86400){
               result.result={command_id:input.command_id,gap_seconds:input.result.gap_seconds};

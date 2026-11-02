@@ -1,7 +1,7 @@
 /* Cache the UI and fixed number voice lexicon, never measured API responses. */
-const CACHE='tc06-web-v0.6.0-ui2';
+const CACHE='tc06-web-v0.7.0';
 const VOICE=['intro','fallback','minus','0','1','2','3','4','5','6','7','8','9','10','100','1000','point','end'];
-const ASSETS=['/','/index.html','/app.js','/graph.js','/voice.js','/style.css','/voice/manifest.json',...VOICE.map(key=>`/voice/${key}.mp3`)];
+const ASSETS=['/','/index.html','/app.js','/collection.js','/graph.js','/voice.js','/style.css','/voice/manifest.json',...VOICE.map(key=>`/voice/${key}.mp3`)];
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)).then(()=>self.skipWaiting()));});
 self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith('tc06-web-')&&key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim()));});
 self.addEventListener('fetch',event=>{

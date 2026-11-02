@@ -18,7 +18,7 @@ def signing(monkeypatch):
     key = Ed25519PrivateKey.generate()
     public = base64.b64encode(key.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)).decode()
     original = updates.verify_manifest
-    monkeypatch.setattr(updates, 'verify_manifest', lambda envelope, current=updates.VERSION: original(envelope, current, public))
+    monkeypatch.setattr(updates, 'verify_manifest', lambda envelope, current='0.6.1': original(envelope, current, public))
     def sign(data):
         raw = json.dumps(data).encode()
         return {'payload': base64.b64encode(raw).decode(), 'signature': base64.b64encode(key.sign(raw)).decode()}
@@ -53,19 +53,19 @@ def test_signature_tampering_origin_and_downgrade(signing):
 def test_verified_stage_preserves_history_and_does_not_overwrite_existing(signing, tmp_path):
     envelope, raw, _ = release(signing)
     history = tmp_path/'history.sqlite3'; history.write_bytes(b'synthetic history')
-    exe = updates.stage_release(envelope, tmp_path, opener=lambda url: io.BytesIO(raw))
+    exe = updates.stage_release(envelope, tmp_path, current='0.6.1', opener=lambda url: io.BytesIO(raw))
     assert exe.is_file() and history.read_bytes() == b'synthetic history'
     assert (exe.parent/'verified-release.json').is_file()
-    assert updates.stage_release(envelope, tmp_path, opener=lambda url: io.BytesIO(raw)) == exe
+    assert updates.stage_release(envelope, tmp_path, current='0.6.1', opener=lambda url: io.BytesIO(raw)) == exe
     exe.write_bytes(b'corrupted staged executable')
-    with pytest.raises(ValueError): updates.stage_release(envelope, tmp_path, opener=lambda url: io.BytesIO(raw))
+    with pytest.raises(ValueError): updates.stage_release(envelope, tmp_path, current='0.6.1', opener=lambda url: io.BytesIO(raw))
     assert not list((tmp_path/'updates').glob('*.part'))
 
 
 @pytest.mark.parametrize('path', ['../escape.exe', '/absolute.exe', 'a\\escape.exe', 'a:stream', 'NUL.txt', 'a./b', 'tc06monitor.EXE'])
 def test_unsafe_archives_never_touch_existing_install(signing, tmp_path, path):
     envelope, raw, _ = release(signing, {path: b'x'})
-    with pytest.raises(ValueError): updates.stage_release(envelope, tmp_path, opener=lambda url: io.BytesIO(raw))
+    with pytest.raises(ValueError): updates.stage_release(envelope, tmp_path, current='0.6.1', opener=lambda url: io.BytesIO(raw))
     assert not (tmp_path/'updates'/'versions'/'0.6.2').exists()
     assert not (tmp_path/'escape.exe').exists()
 
@@ -74,7 +74,7 @@ def test_unsafe_archives_never_touch_existing_install(signing, tmp_path, path):
 def test_incomplete_or_corrupt_download_is_removed(signing, tmp_path, truncate):
     envelope, raw, _ = release(signing)
     corrupt = raw[:-1] if truncate else b'X' + raw[1:]
-    with pytest.raises(ValueError): updates.stage_release(envelope, tmp_path, opener=lambda url: io.BytesIO(corrupt))
+    with pytest.raises(ValueError): updates.stage_release(envelope, tmp_path, current='0.6.1', opener=lambda url: io.BytesIO(corrupt))
     assert not list((tmp_path/'updates').glob('*.part'))
     assert not (tmp_path/'updates'/'versions'/'0.6.2').exists()
 
@@ -105,7 +105,7 @@ def test_successful_switch_keeps_previous_pointer_and_rejects_replay(tmp_path):
     updates.atomic_json(tmp_path/'updates'/'active.json', {})
     result=apply_transaction(tmp_path,j,lambda *a,**k:'new',lambda *a,**k:None,lambda p:None,wait_old=lambda pid:None)
     assert result['status']=='completed'
-    assert active_executable(tmp_path)==exe
+    assert active_executable(tmp_path, installed_version='0.6.1')==exe
     assert json.loads((tmp_path/'updates'/'transaction.json').read_text())['previous_pointer']=={}
 
 

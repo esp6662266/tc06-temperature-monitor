@@ -70,7 +70,7 @@ def run_gui(autostart=False, smoke_report=None, update_health=None):
     pane.columnconfigure(1, weight=1)
     ttk.Label(pane, text="설정 저장 후에는 프로그램 실행 시 자동으로 수집을 시작합니다.").grid(row=6, column=0, columnspan=2, sticky="w", pady=5)
     value = tk.StringVar(value="— ℃")
-    status = tk.StringVar(value="대기 · 첫 정상 판독 즉시 저장, 이후 1분 간격")
+    status = tk.StringVar(value="대기 · 첫 정상 판독 즉시 저장, 이후 홈페이지 기록 간격 적용")
     saved = tk.StringVar(value="로컬 저장: 없음")
     uploaded = tk.StringVar(value="서버 저장: 없음")
     detail = tk.StringVar(value="")
@@ -178,6 +178,8 @@ def run_gui(autostart=False, smoke_report=None, update_health=None):
                     state["api_ready"] = True
                     uploaded.set("서버 저장 확인: " + event["uploaded_at"])
                     detail.set("전송 대기: " + str(event.get("pending", 0)))
+                if "record_interval_seconds" in event:
+                    detail.set(f"홈페이지 기록 간격 적용: {event['record_interval_seconds']}초 · 설정은 5분마다 확인")
                 for key in ["network_error", "error"]:
                     if key in event:
                         detail.set(event[key])

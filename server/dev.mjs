@@ -11,7 +11,7 @@ const api = createAPI(() => store);
 const updateStore = new MemoryStore();
 const updates = createUpdates(() => updateStore);
 const base = fileURLToPath(new URL('../web/', import.meta.url));
-const allowed = new Map([['/', ['index.html', 'text/html']], ['/app.js', ['app.js', 'text/javascript']], ['/style.css', ['style.css', 'text/css']], ['/index.html', ['index.html', 'text/html']], ['/sw.js', ['sw.js', 'text/javascript']], ['/graph.js', ['graph.js', 'text/javascript']], ['/voice.js', ['voice.js', 'text/javascript']], ['/voice/manifest.json', ['voice/manifest.json', 'application/json']]]);
+const allowed = new Map([['/', ['index.html', 'text/html']], ['/app.js', ['app.js', 'text/javascript']], ['/collection.js', ['collection.js','text/javascript']], ['/style.css', ['style.css', 'text/css']], ['/index.html', ['index.html', 'text/html']], ['/sw.js', ['sw.js', 'text/javascript']], ['/graph.js', ['graph.js', 'text/javascript']], ['/voice.js', ['voice.js', 'text/javascript']], ['/voice/manifest.json', ['voice/manifest.json', 'application/json']]]);
 for(const [file,type]of[['updates.html','text/html'],['updates.js','text/javascript'],['updates.css','text/css']])allowed.set('/'+file,[file,type]);
 const manifest=JSON.parse(await readFile(path.join(base,'voice/manifest.json'),'utf8'));
 for(const key of Object.keys(manifest.words))allowed.set(`/voice/${key}.mp3`,[`voice/${key}.mp3`,'audio/mpeg']);

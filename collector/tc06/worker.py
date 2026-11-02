@@ -11,7 +11,8 @@ from pathlib import Path
 from .capture import DeviceSource, WindowSource
 from .core import Outbox, make_record, utc_now
 from .ocr import Reader
-from .recovery import Diagnostics, Recovery
+from .recovery import Diagnostics, Recovery, VERSION
+from .collection import valid_interval, load_interval, save_interval
 
 
 def validate_endpoint(base):
@@ -36,12 +37,14 @@ class Monitor:
         self.threads = []
         self.lock = threading.Lock()
         self.running = False
+        self.interval_path = self.runtime / "collection-settings.json"
+        self.record_interval_seconds = load_interval(self.interval_path, self.base)
 
     def start(self):
         initialized = Outbox(self.runtime / "history.sqlite3")
         initialized.close()
         self.running = True
-        for target in (self._collect, self._send):
+        for target in (self._collect, self._send, self._sync_settings):
             thread = threading.Thread(target=target, daemon=True)
             thread.start()
             self.threads.append(thread)
@@ -53,6 +56,27 @@ class Monitor:
     def alive(self):
         return any(thread.is_alive() for thread in self.threads)
 
+    def _sync_settings(self):
+        while not self.stop_event.is_set():
+            try:
+                request = urllib.request.Request(self.base + "/api/settings")
+                with urllib.request.urlopen(request, timeout=15) as response:
+                    data = json.load(response)
+                seconds = data.get("interval_seconds")
+                if not valid_interval(seconds):
+                    raise ValueError("Invalid recording interval")
+                with self.lock:
+                    self.record_interval_seconds = seconds
+                try:
+                    save_interval(self.interval_path, self.base, seconds)
+                except OSError:
+                    logging.warning("Recording interval cache unavailable")
+                self.notify({"record_interval_seconds": seconds})
+            except Exception:
+                logging.warning("Recording interval unavailable; keeping last valid setting")
+            # Never poll at the local OCR or uploader retry frequency.
+            self.stop_event.wait(300)
+
     def _collect(self):
         source = None
         box = None
@@ -60,7 +84,7 @@ class Monitor:
         try:
             box = Outbox(self.runtime / "history.sqlite3")
             reader = Reader(self.config.get("tesseract_path", ""))
-            recovery = Recovery()
+            recovery = Recovery(interval_seconds=self.record_interval_seconds)
             try:
                 diagnostics = Diagnostics(self.runtime)
             except OSError:
@@ -100,6 +124,8 @@ class Monitor:
                 if frame is not None:
                     reading["input_size"] = [int(frame.shape[1]), int(frame.shape[0])]
                 now = time.monotonic()
+                with self.lock:
+                    recovery.set_interval(self.record_interval_seconds)
                 schedule = recovery.observe(reading, now)
                 try:
                     if diagnostics:
@@ -109,6 +135,7 @@ class Monitor:
                 self.notify({"reading": reading, "recovery": schedule, "ocr_ready": True})
                 if schedule["save"]:
                     record = make_record(reading, self.config["device_id"])
+                    record.update(record_interval_seconds=recovery.interval_seconds, collector_version=VERSION)
                     box.add(record)
                     self.notify({"saved_at": record["recorded_at"], "pending": box.count_pending()})
                     # Do not invent missing minute readings after a long pause.

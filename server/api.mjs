@@ -1,6 +1,7 @@
 import { updateTrend, getTrend, readDay } from './trend.mjs';
 import { estimateAt, ESTIMATE_STATUSES, MAX_ESTIMATE_MS } from './estimate.mjs';
 import { RETENTION_DAYS, dayKST, oldestDay, expired } from './retention.mjs';
+import { collectionSettings, validInterval } from './collection.mjs';
 
 const STATUSES = new Set(['ok', 'anchor_missing', 'ambiguous_anchor', 'occluded', 'ocr_failed',
   'value_suspect', 'low_confidence', 'freshness_unverified', 'stale_source', 'source_error', 'window_missing', 'ocr_timeout']);
@@ -58,7 +59,9 @@ export function validateRecord(raw, now = Date.now()) {
   return { id: raw.id, asset: 'TC-06', device_id: raw.device_id,
     captured_at: new Date(raw.captured_at).toISOString(), recorded_at: new Date(raw.recorded_at).toISOString(),
     status: raw.status, value_c: raw.value_c, confidence: raw.confidence,
-    source_clock: typeof raw.source_clock === 'string' ? raw.source_clock.slice(0, 16) : null };
+    source_clock: typeof raw.source_clock === 'string' ? raw.source_clock.slice(0, 16) : null,
+    ...(validInterval(raw.record_interval_seconds)?{record_interval_seconds:raw.record_interval_seconds}:{}),
+    ...(typeof raw.collector_version==='string'&&/^\d{1,4}\.\d{1,4}\.\d{1,4}$/.test(raw.collector_version)?{collector_version:raw.collector_version}:{}) };
 }
 
 export async function updateLatest(store, record, key = 'latest') {
@@ -117,10 +120,22 @@ export async function currentEstimate(store, current, last, now=Date.now()) {
 }
 
 export function createAPI(getStore) {
+  const collection=collectionSettings(getStore);
   return async function handle(request) {
     const url = new URL(request.url);
     const action = url.pathname.split('/').filter(Boolean).pop();
     const method = request.method;
+    if(action==='settings'){
+      try{
+        if(method==='GET')return json(await collection.read(true),200,{'Netlify-CDN-Cache-Control':'public, durable, max-age=60'});
+        if(method!=='POST')return json({error:'GET or POST required'},405);
+        const origin=request.headers.get('Origin');
+        if(origin&&origin!==url.origin)return json({error:'다른 사이트에서 설정을 변경할 수 없습니다'},403);
+        let input;try{input=await bodyJSON(request);}catch{return json({error:'JSON 설정을 확인하세요'},400);}
+        const result=await collection.save(input);
+        return json(result,result.status||200);
+      }catch{return json({error:'설정을 저장하거나 불러오지 못했습니다'},503);}
+    }
     if (action === 'ingest') {
       if (method !== 'POST') return json({ error: 'POST required' }, 405);
       let body, record;
@@ -153,7 +168,8 @@ export function createAPI(getStore) {
         const last_good = await lastGood(store, record);
         let estimate=null;try{estimate=await currentEstimate(store,record,last_good);}catch{/* Optional forecast cannot hide real records on failure. */}
         if(estimate && Date.parse(estimate.expires_at)<Date.now())estimate=null;
-        return json({ retention_days: RETENTION_DAYS, oldest_day: oldestDay(), record, last_good, estimate, server_now: new Date().toISOString(), max_age_ms: AGE_MS,
+        let collection_settings=null;try{collection_settings=await collection.read();}catch{/* A settings outage must not hide real readings. */}
+        return json({ collection_settings, retention_days: RETENTION_DAYS, oldest_day: oldestDay(), record, last_good, estimate, server_now: new Date().toISOString(), max_age_ms: AGE_MS,
           fresh: Boolean(record && ageMs >= -30_000 && ageMs <= AGE_MS) });
       }
       if (action === 'audio') return json({ error: '웹 숫자 TTS로 전환되어 서버 음성 저장을 종료했습니다' }, 410);

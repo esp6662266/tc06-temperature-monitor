@@ -6,7 +6,7 @@ from pathlib import Path
 import time
 import uuid
 
-VERSION = "0.6.1"
+VERSION = "0.7.0"
 STATUS_TEXT = {
     "ok": "정상 판독", "source_error": "영상 캡처 실패", "window_missing": "창 없음·최소화",
     "ocr_timeout": "판독 시간 초과", "ocr_failed": "숫자 판독 실패",
@@ -18,13 +18,23 @@ STATUS_TEXT = {
 
 
 class Recovery:
-    def __init__(self, now=None):
+    def __init__(self, now=None, interval_seconds=60):
         now = time.monotonic() if now is None else now
-        self.next_save = now + 60
+        self.interval_seconds = interval_seconds
+        self.last_save = now
+        self.next_save = now + interval_seconds
         self.saved_once = False
         self.failed_at = None
         self.attempts = 0
         self.failed_saved = False
+
+    def set_interval(self, seconds):
+        from .collection import valid_interval
+        if not valid_interval(seconds):
+            raise ValueError("Invalid recording interval")
+        if seconds != self.interval_seconds:
+            self.interval_seconds = seconds
+            self.next_save = self.last_save + seconds
 
     def observe(self, reading, now):
         good = reading.get("status") == "ok"
@@ -37,7 +47,7 @@ class Recovery:
             self.attempts += 1
         save = now >= self.next_save or (good and (not self.saved_once or (recovering and self.failed_saved)))
         if save:
-            self.saved_once, self.next_save = True, now + 60
+            self.saved_once, self.last_save, self.next_save = True, now, now + self.interval_seconds
             self.failed_saved = not good
         failed_seconds = 0 if good else max(0, now - self.failed_at)
         return {"save": save, "recovered": recovering, "retry_seconds": 2 if good else (3 if failed_seconds < 30 else 10),

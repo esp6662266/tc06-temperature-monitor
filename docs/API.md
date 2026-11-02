@@ -71,3 +71,11 @@
 응답 `bars`는 `time`, `open`, `high`, `low`, `close`, `count`, `invalid_count`, `complete`다. 정상 기록이 없으면 온도 네 항목은 null이며 실패/공백을 0이나 38로 바꾸지 않는다. `complete`는 해당 시간 구간이 끝났는지다. `samples`, `invalid_samples`, `low`, `high`, `start`, `end`, `server_now`, `oldest_day`도 반환한다.
 
 색인 `trend/YYYY-MM-DD`는 버전·날짜·이전 이력 스캔 완료 여부와 `{UUID: [캡처 epoch ms, 값 또는 null, 상태, 기록 epoch ms, device_id]}`를 보관한다. ETag 조건부 병합으로 동시에 저장한 값·과거 재전송·중복 재전송을 보존한다. 최초 조회에서 이전 `records`를 한 번 병합하고, v2는 이전 색인에 장치 정보를 한 번 보강하며, 이후 조회는 경계에 따라 색인 1~3개만 읽는다. 30일 정리에 `trend/날짜`도 포함된다. 음성·이미지를 색인에 저장하지 않는다.
+
+## 홈페이지 기록 간격 (0.7.0)
+
+`GET /api/settings`는 `{interval_seconds,revision,updated_at}`를 반환한다. 저장 전 기본은 60초다. 설정 GET만 Netlify CDN에서 최대 60초 캐시하며 브라우저/API 측정 응답은 기존 no-store를 유지한다.
+
+`POST /api/settings`의 JSON은 `{interval_seconds:600,revision:현재리비전}`이다. 정수 30~3600초만 허용한다. 공개 온도 접속 정책을 유지하며 Origin이 다른 웹사이트 요청은 403, 잘못된 값은 400, 동시 변경/오래된 revision은 409, 저장소 장애는 503이다. 저장은 ETag 조건부 쓰기로 충돌을 막고 새 revision을 반환한다. 응답이 불확실하면 GET으로 설정부터 확인한다.
+
+`/api/latest`에 `collection_settings`를 포함한다(프로세스 내 최대 60초 캐시). 0.7.0 수집기 기록의 `record_interval_seconds`, `collector_version`을 별도로 보존·반환해 서버 저장과 실제 PC 반영을 구분한다. 기존 기록/CSV 열/150초 신선도/추정/30일 정책은 유지한다. 설정은 측정 이력이 아니며 온도 데이터나 그래프 봉을 만들지 않는다.

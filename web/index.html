@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#000000"><title>TC-06 · 현장 온도</title>
-  <link rel="stylesheet" href="/style.css"><script defer src="/voice.js"></script><script defer src="/graph.js"></script><script defer src="/app.js"></script>
+  <link rel="stylesheet" href="/style.css"><script defer src="/voice.js"></script><script defer src="/graph.js"></script><script defer src="/collection.js"></script><script defer src="/app.js"></script>
 </head>
 <body data-mode="display" data-state="loading">
   <main>
@@ -22,10 +22,21 @@
         <label>숫자 화면 색상 조합<select id="color"><option value="white">검정 바탕 · 흰 숫자</option><option value="amber">검정 바탕 · 노란 숫자 ★ 추천</option><option value="mint">검정 바탕 · 민트 숫자</option><option value="cyan">검정 바탕 · 하늘 숫자</option><option value="orange">검정 바탕 · 주황 숫자</option><option value="navy">남색 바탕 · 흰 숫자</option><option value="yellow">노랑 바탕 · 검정 숫자</option><option value="custom">검정 바탕 · 직접 선택</option></select><input id="custom-color" type="color" aria-label="직접 숫자 색상 선택" value="#ffffff"><span class="color-preview" aria-hidden="true">123.4</span><small>색상 미리보기 · 예시 숫자</small></label>
         <label>숫자 화면 숫자 크기<input id="size" aria-label="숫자 크기" type="range" min="50" max="100" value="90" step="5"></label>
       </div></details>
+      <details id="collection-panel" class="settings"><summary>서버 기록 간격 · 사용량 절감</summary>
+        <p class="note">모든 수집 PC와 홈페이지에 공통으로 적용됩니다. 수집기 0.7.0 이상이 필요합니다.</p>
+        <p id="collection-current" class="note">서버 설정 확인 중</p><p id="collection-applied" class="note">PC 적용 미확인</p>
+        <form id="collection-form">
+          <label for="collection-seconds">기록·화면 조회 간격 (초)</label>
+          <div class="collection-controls"><input id="collection-seconds" type="number" min="30" max="3600" step="1" value="300" required aria-describedby="collection-volume collection-limit"><button id="collection-save" disabled>서버에 저장</button><button id="collection-reload" type="button" class="secondary">설정 다시 불러오기</button></div>
+          <div class="collection-presets" role="group" aria-label="기록 간격 빠른 선택"><button type="button" class="secondary" data-collection-seconds="60">1분</button><button type="button" class="secondary" data-collection-seconds="120">2분</button><button type="button" class="secondary" data-collection-seconds="300">5분 · 절감 추천</button><button type="button" class="secondary" data-collection-seconds="600">10분</button></div>
+          <p id="collection-volume" class="note"></p><p id="collection-result" class="note" role="status">30~3600초를 입력하세요. 저장 후 PC가 설정을 받기까지 최대 약 6분이 걸리며, 다음 기록에서 적용 여부를 확인합니다.</p>
+        </form>
+        <p id="collection-limit" class="note">간격을 늘리면 기록 사이의 온도 변화는 저장되지 않습니다. 판독 후 150초가 지나면 기존 정책대로 마지막 정상값으로 표시하고 음성을 대기합니다. 최초 정상 판독·실패 후 복구 기록과 재전송은 별도로 발생할 수 있습니다. 사용량과 요금의 실제 감소는 Netlify에서 확인하세요.</p>
+      </details>
       <details id="policy-panel"><summary>표시 정책 · 사용 안내</summary><p class="note">실측값은 최근 수신한 실제 판독값입니다. 짧은 OCR 실패는 안정적인 최근 실측 3~5개로 마지막 실측 후 최대 2분까지만 추정하며 ≈ 표시를 붙입니다. 추정 조건이 맞지 않거나 시간이 지나면 마지막 정상값과 경과 시간을 표시합니다. 추정·과거 값은 현재 온도로 읽지 않도록 음성 안내가 대기합니다. 보관된 실측 이력이 없을 때만 기본 표시값 38도를 사용하며 음성에서도 기본값임을 먼저 알립니다.</p><p class="note">실측·실패 원본 기록과 CSV는 유지합니다. 추정은 실측 봉·최저/최고 통계에 포함하지 않습니다. 숫자 화면은 터치·Enter로 메뉴를 열고 Esc로 일반 화면으로 돌아옵니다. 음성과 전체 화면은 처음 한 번 조작이 필요합니다.</p></details>
       <p id="retention-status" class="note">최근 30일 보관 (한국날짜 기준) · 매시 15분 자동 삭제 · 서버에는 온도 텍스트만 저장</p><details id="history-panel"><summary>기록 다운로드</summary><div class="history"><label>기록 일자 (한국시간)<input id="history-day" type="date" aria-describedby="history-status" required></label><button id="download" class="secondary" aria-describedby="history-status">CSV 다운로드</button></div><p id="history-status" class="note" role="status">한국시간 기준 오늘을 포함한 최근 30일의 기록을 받을 수 있습니다.</p><p class="note">영상에서 읽은 참고 표시값입니다. 운전·보호 판단은 기존 HMI에서 확인하세요.</p></details>
     </section>
-    <footer><a href="/updates.html">수집기 업데이트</a><span>1분 간격 저장 · 한국시간 표시</span><span id="updated">첫 조회 대기</span></footer>
+    <footer><a href="/updates.html">수집기 업데이트</a><span id="recording-policy">기록 간격 확인 중 · 한국시간 표시</span><span id="updated">첫 조회 대기</span></footer>
   </main>
   <section id="graph-screen" aria-label="TC-06 온도 추이 그래프" hidden>
     <header class="graph-header"><div><span id="graph-reading-label" class="eyebrow">TC-06 · 온도 확인 중</span><div class="graph-reading"><strong id="graph-temperature">—</strong><span>℃</span><span id="graph-quality" class="badge">불러오는 중</span></div><p id="graph-current-status" class="note">수신 상태 확인 중</p></div><div class="graph-navigation"><button id="graph-to-display" class="secondary">숫자 화면</button><button id="graph-to-normal" class="secondary">일반 화면</button><button id="graph-settings" class="secondary">설정</button><button id="graph-speech" class="secondary">음성 시작</button><button id="graph-fullscreen">전체 화면</button></div></header>

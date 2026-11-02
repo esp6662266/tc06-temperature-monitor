@@ -40,7 +40,7 @@ async function refresh(announce=true){
   try{const result=await api('overview');$('workspace').hidden=false;$('login').hidden=true;render(result.devices);if(announce)notice('현장 PC 상태를 확인했습니다. 새 버전이 있어도 직접 실행하기 전에는 적용하지 않습니다.');}
   catch(error){for(const button of $('devices').querySelectorAll('button'))button.disabled=true;$('confirmation').hidden=true;selection=null;notice(error.message);throw error;}
 }
-$('login').onsubmit=async event=>{event.preventDefault();credential=$('admin-token').value.trim();try{await refresh();$('admin-token').value='';clearInterval(timer);timer=setInterval(()=>refresh(false).catch(()=>{}),15_000);}catch{credential='';}};
+$('login').onsubmit=async event=>{event.preventDefault();credential=$('admin-token').value.trim();try{await refresh();$('admin-token').value='';clearInterval(timer);timer=setInterval(()=>{if(!document.hidden)refresh(false).catch(()=>{});},300_000);}catch{credential='';}};
 $('refresh').onclick=()=>refresh().catch(()=>{});
 $('logout').onclick=()=>{credential='';clearInterval(timer);selection=null;$('workspace').hidden=true;$('login').hidden=false;$('devices').replaceChildren();$('pair-token').value='';$('pair-result').hidden=true;$('confirmation').hidden=true;notice('업데이트 관리자 연결을 해제했습니다.');};
 $('cancel').onclick=()=>{selection=null;$('confirmation').hidden=true;};

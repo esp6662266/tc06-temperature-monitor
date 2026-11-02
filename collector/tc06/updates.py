@@ -236,7 +236,7 @@ class UpdatePoller:
                         self.latest = latest_manifest()
                     except Exception:
                         self.latest = None
-                response = self.client.request("heartbeat", {"version": self.version, "status": self.status,
+                response = self.client.request("heartbeat", {"version": self.version, "status": self.status, "heartbeat_seconds": 300,
                     "command_id": self.command_id, "available": self.latest, "result": self.result})
                 command = response.get("command")
                 if command and command["id"] not in self.seen:
@@ -273,4 +273,4 @@ class UpdatePoller:
                     self.notify({"update_status": labels.get(self.status, "업데이트 상태: " + self.status)})
             except Exception:
                 self.notify({"update_status": "업데이트 서버 연결 확인 필요 · 온도 수집 계속"})
-            self.stop_event.wait(15)
+            self.stop_event.wait(300)

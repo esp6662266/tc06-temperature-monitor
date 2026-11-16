@@ -305,29 +305,53 @@ test('graph refresh updates the header and history independently and preserves a
  await expect(page.locator('#graph-refresh-status')).toHaveText('최신 온도 갱신 · 그래프 이력 조회 실패');
 });
 
-test('one-minute chart bridges only short bounded gaps and keeps quality and measured statistics separate',async({page})=>{
+test('one-minute chart bridges bounded gaps and keeps estimates, long gaps, and measured statistics separate',async({page})=>{
  const data=trendSample();
- const gaps=new Map([[0,'unknown'],[3,'overdue'],[6,'failed'],[7,'scheduled'],[11,'overdue'],[12,'overdue'],[13,'overdue'],[18,'failed'],[59,'pending']]);
+ const gaps=new Map([
+  [0,'unknown'],[3,'overdue'],[6,'failed'],[7,'scheduled'],
+  [11,'failed'],[12,'failed'],[13,'failed'],[18,'failed'],
+  [24,'overdue'],[25,'overdue'],[26,'overdue'],[27,'overdue'],[59,'pending'],
+ ]);
  for(const [index,state] of gaps){
   Object.assign(data.bars[index],{open:null,close:null,high:null,low:null,count:0,invalid_count:state==='failed'?1:0,empty_state:state,complete:state!=='pending'});
  }
- data.estimates=[{value_c:118,based_on_value_c:117,based_on_at:data.bars[17].time,estimated_at:data.bars[18].time}];
+ data.estimates=[
+  {value_c:118,based_on_value_c:117,based_on_at:data.bars[10].time,estimated_at:data.bars[12].time},
+  {value_c:118,based_on_value_c:117,based_on_at:data.bars[17].time,estimated_at:data.bars[18].time},
+ ];
  data.samples=60-gaps.size;
- data.invalid_samples=2;
+ data.invalid_samples=5;
+ await page.clock.install();
  await page.route('**/api/latest',r=>r.fulfill({json:sample()}));
  await page.route('**/api/trend**',r=>r.fulfill({json:data}));
  await page.goto('/?mode=graph');
- await expect(page.locator('.chart-bridge')).toHaveCount(2);
+ await expect(page.locator('.chart-bridge')).toHaveCount(5);
+ await expect(page.locator('.chart-bridge-long')).toHaveCount(1);
  await expect(page.locator('#graph-bridge-legend')).toBeVisible();
- await expect(page.locator('.chart-estimate')).toHaveCount(1);
+ await expect(page.locator('#graph-long-bridge-legend')).toBeVisible();
+ await expect(page.locator('.chart-estimate')).toHaveCount(2);
  await expect(page.locator('.candle')).toHaveCount(data.samples);
  await expect(page.locator('#graph-measured')).toHaveText(String(data.samples));
- await expect(page.locator('#graph-failed')).toHaveText('2');
- await expect(page.locator('#graph-missing')).toHaveText('4');
+ await expect(page.locator('#graph-failed')).toHaveText('5');
+ await expect(page.locator('#graph-missing')).toHaveText('5');
  await expect(page.locator('#graph-high')).toHaveText(data.high.toFixed(1)+' ℃');
  await expect(page.locator('.quality-scheduled')).toHaveCount(1);
  await expect(page.locator('.quality-unknown')).toHaveCount(1);
  await expect(page.locator('.quality-pending')).toHaveCount(1);
  await page.locator('#trend-chart').press('End');
  await expect(page.locator('#graph-detail')).toContainText('기록 대기 중');
+ await expect(page.locator('#graph-detail')).not.toContainText('양쪽 실측점 연결');
+ await page.locator('#trend-chart').press('Home');
+ for(let i=0;i<24;i++)await page.locator('#trend-chart').press('ArrowRight');
+ await expect(page.locator('#graph-detail')).toContainText('실측 없는 1분봉 4개');
+
+ const nextBar={...data.bars[58],time:data.end};
+ data.bars[59].complete=true;
+ data.bars[59].empty_state='overdue';
+ data.bars.push(nextBar);
+ data.end=new Date(Date.parse(data.end)+60000).toISOString();
+ data.samples++;
+ await page.clock.fastForward(61000);
+ await expect(page.locator('.chart-bridge')).toHaveCount(6);
+ await expect(page.locator('.candle')).toHaveCount(data.samples);
 });

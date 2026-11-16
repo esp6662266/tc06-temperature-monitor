@@ -6,7 +6,7 @@
   const stamp=new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});
   const day=value=>new Date(value+9*3600000).toISOString().slice(0,10);
   const number=value=>Number.isFinite(value)?value.toFixed(1):'—';
-  const bridgeLimit=2;
+  const shortGapMinutes=3;
   const emptyLabels={overdue:'기록 예정 초과',scheduled:'기록 예정 없음',pending:'기록 대기 중',unknown:'저장 기록 없음 · 적용 간격 미확인'};
   const emptyState=bar=>Object.hasOwn(emptyLabels,bar.empty_state)?bar.empty_state:bar.complete?'unknown':'pending';
   function savedSettings(key){
@@ -107,6 +107,7 @@
       svg.setAttribute('viewBox',`0 0 ${width} ${height}`);svg.replaceChildren();$('quality-chart').replaceChildren();$('graph-tooltip').hidden=true;
       this.layout={width,height,left,top,plotW,plotH};
       $('graph-bridge-legend').hidden=true;
+      $('graph-long-bridge-legend').hidden=true;
       const data=this.data,bars=data?.bars||[],valid=bars.filter(bar=>bar.count>0);
       $('graph-data-notice').hidden=!this.error;$('graph-data-notice').textContent=this.error||'';
       $('graph-measured').textContent=data?data.samples.toLocaleString('ko-KR'):'—';
@@ -155,20 +156,22 @@
       }
       let path='',previous=-2;
       const bridges=element('g',{'class':'bridges'});
-      const estimateRanges=estimates.map(item=>[Date.parse(item.based_on_at),Date.parse(item.estimated_at)]);
+      let shortBridge=false,longBridge=false;
       bars.forEach((bar,i)=>{
         if(!bar.count)return;
         const point=x(i).toFixed(2)+','+y(bar.close).toFixed(2);
         path+=(previous===i-1?'L':'M')+point;
-        if(data.minutes===1&&previous>=0&&i-previous>1&&i-previous<=bridgeLimit+1){
-          const a=slots[previous].center,b=slots[i].center;
-          if(!estimateRanges.some(([from,to])=>from<b&&to>a)){
-            bridges.append(element('path',{d:`M${x(previous)},${y(bars[previous].close)} L${point}`,'class':'chart-bridge'}));
-          }
+        if(data.minutes===1&&previous>=0&&i-previous>1){
+          const gapMinutes=i-previous-1,isLong=gapMinutes>shortGapMinutes;
+          if(isLong)longBridge=true;else shortBridge=true;
+          const pathClass=isLong?'chart-bridge chart-bridge-long':'chart-bridge';
+          bridges.append(element('path',{d:`M${x(previous)},${y(bars[previous].close)} L${point}`,'class':pathClass}));
+          for(let gap=previous+1;gap<i;gap++)slots[gap].gapMinutes=gapMinutes;
         }
         previous=i;
       });
-      $('graph-bridge-legend').hidden=!bridges.childElementCount;
+      $('graph-bridge-legend').hidden=!shortBridge;
+      $('graph-long-bridge-legend').hidden=!longBridge;
       if(bridges.childElementCount)plot.append(bridges);
       plot.append(element('path',{d:path,'class':'chart-close'}));
       const candles=element('g',{'class':'candles'});plot.append(candles);
@@ -231,6 +234,7 @@
       let detail=bar.count?`${time} · 첫값 ${number(bar.open)} · 최고 ${number(bar.high)} · 최저 ${number(bar.low)} · 마지막 ${number(bar.close)} ℃ · 정상 ${bar.count}건 / 실패 ${bar.invalid_count}건`:`${time} · ${bar.invalid_count?'정상 판독 없음 / 실패 '+bar.invalid_count+'건':emptyLabels[emptyState(bar)]}`;
       if(slot.from>slot.time)detail+=' · 조회 시작 이후만 집계';
       if(!bar.complete&&(bar.count||bar.invalid_count))detail+=' · 진행 중인 봉';
+      if(slot.gapMinutes)detail+=` · 실측 없는 1분봉 ${slot.gapMinutes}개 · 양쪽 실측점 연결`;
       if(estimates.length)detail+=' · 추정 '+estimates.map(item=>'약 '+number(item.value_c)+' ℃').join(', ')+' (실측 아님·정상 통계 제외)';
       if(showDetail&&$('graph-detail').textContent!==detail)$('graph-detail').textContent=detail;
       if(!showTooltip)return;

@@ -54,6 +54,8 @@ body[data-mode=display] #display-menu:not([hidden])~#display-held{visibility:hid
 
 .chart-bridge{fill:none;stroke:#9aafc2;stroke-width:1.7;stroke-dasharray:4 4;stroke-linecap:round}
 .chart-legend .legend-bridge{width:14px;height:0;border-top:2px dashed #9aafc2;vertical-align:middle}
+.chart-bridge-long{stroke:#788b9e;stroke-width:1.4;stroke-dasharray:3 6}
+.chart-legend .legend-bridge-long{border-top-color:#788b9e}
 .quality-key.overdue,.quality-overdue{background:#cb8f65;fill:#cb8f65}
 .quality-key.scheduled,.quality-scheduled{background:#283846;fill:#283846}
 .quality-key.pending,.quality-pending{background:#7f9ab5;fill:#7f9ab5}

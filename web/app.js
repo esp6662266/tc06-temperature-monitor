@@ -66,6 +66,7 @@ function refresh(){
   refreshPromise=(async()=>{const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),8000);
     try{const response=await fetch('/api/latest',{cache:'no-store',signal:controller.signal});if(!response.ok)throw Error('server');const data=await response.json();if(!Number.isFinite(Date.parse(data.server_now)))throw Error('time');latest=data.record;serverEstimate=data.estimate||null;serverOffset=Date.parse(data.server_now)-Date.now();rememberNormal(data.last_good);rememberNormal(latest);networkOK=true;TC06Collection.observe(data);lastLookupAt=Date.now();byId('updated').textContent=`조회 ${formatTime(data.server_now)}`;}
     catch{networkOK=false;}finally{clearTimeout(timeout);lookupDone=true;render();}
+    return networkOK;
   })().finally(()=>{refreshPromise=null;});return refreshPromise;
 }
 async function manualRefresh(){
@@ -74,6 +75,18 @@ async function manualRefresh(){
   for(const id of ['refresh-status','display-refresh-status']){byId(id).textContent='최신 온도를 다시 조회하고 있습니다…';byId(id).dataset.state='loading';}
   try{await refresh();for(const id of ['refresh-status','display-refresh-status']){byId(id).textContent=networkOK?`재조회 완료 · 자동 조회는 ${TC06Collection.label}마다 계속됩니다.`:`재조회 실패 · 인터넷 연결을 확인해 주세요. 자동 조회는 ${TC06Collection.label}마다 다시 시도합니다.`;byId(id).dataset.state=networkOK?'success':'error';}}
   finally{buttons.forEach((button,index)=>{button.disabled=false;button.textContent=labels[index];});}
+}
+async function refreshGraph(){
+  const button=byId('graph-refresh'),status=byId('graph-refresh-status');
+  button.disabled=true;
+  status.hidden=false;
+  status.dataset.state='loading';
+  status.textContent='최신 온도와 그래프 이력을 조회 중입니다…';
+  try{
+    const [latest,trend]=await Promise.all([refresh(),graph.load(true)]);
+    status.textContent=`최신 온도 ${latest?'갱신':'조회 실패'} · 그래프 이력 ${trend===null?'조회 조건 변경':trend?'갱신':'조회 실패'}`;
+    status.dataset.state=latest&&trend!==false?'success':'error';
+  }finally{button.disabled=false;}
 }
 async function announce(){
   if(!enabled||announcing||document.hidden)return;announcing=true;
@@ -108,6 +121,7 @@ byId('settings-panel').addEventListener('toggle',()=>byId('settings-open').setAt
 for(const key of ['volume','interval','color','size'])byId(key).addEventListener('input',()=>{settings[key]=key==='color'?byId(key).value:Number(byId(key).value);try{localStorage.setItem('tc06-settings-v2',JSON.stringify(settings));}catch{}if(key==='interval')nextAnnouncement=Date.now()+settings.interval*1000;applySettings();});
 byId('custom-color').addEventListener('input',()=>{settings.customColor=byId('custom-color').value;settings.color='custom';try{localStorage.setItem('tc06-settings-v2',JSON.stringify(settings));}catch{}applySettings();});
 for(const id of ['refresh-latest','display-refresh'])byId(id).addEventListener('click',manualRefresh);
+byId('graph-refresh').addEventListener('click',refreshGraph);
 byId('speech-start').addEventListener('click',start);byId('speech-stop').addEventListener('click',stop);byId('display-speech').addEventListener('click',()=>enabled?stop():start());
 byId('fullscreen').addEventListener('click',fullscreen);byId('display-fullscreen').addEventListener('click',fullscreen);
 byId('display-mode').addEventListener('click',()=>{setMode('display');fullscreen();});byId('normal-mode').addEventListener('click',()=>setMode('normal'));

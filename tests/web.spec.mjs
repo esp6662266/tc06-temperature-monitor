@@ -74,12 +74,16 @@ function trendSample(minutes=1,empty=false){
  const bars=Array.from({length:60/minutes},(_,i)=>{const value=Math.round((110+Math.sin(i/3)*8)*10)/10;return{time:new Date(start+i*minutes*60000).toISOString(),open:empty?null:value,high:empty?null:value+4,low:empty?null:value-5,close:empty?null:value+2,count:empty?0:minutes,invalid_count:0,complete:true};});
  return{day:new Date(Date.now()+9*3600000).toISOString().slice(0,10),minutes,span:60,timezone:'Asia/Seoul',server_now:new Date().toISOString(),start:new Date(start).toISOString(),end:new Date(end).toISOString(),oldest_day:'2026-01-01',bars,samples:empty?0:60,invalid_samples:0,low:empty?null:Math.min(...bars.map(b=>b.low)),high:empty?null:Math.max(...bars.map(b=>b.high))};
 }
-test('graph mode keeps current temperature visible while switching 1, 5 and 10-minute candles',async({page})=>{
- const requested=[];await page.route('**/api/latest',route=>route.fulfill({json:sample()}));
- await page.route('**/api/trend**',route=>{const minutes=Number(new URL(route.request().url()).searchParams.get('minutes'));requested.push(minutes);return route.fulfill({json:trendSample(minutes)});});
+test('graph mode keeps current temperature and the exact window while switching 1, 5 and 10-minute candles',async({page})=>{
+ const requested=[],end=trendSample().end;await page.route('**/api/latest',route=>route.fulfill({json:sample()}));
+ await page.route('**/api/trend**',route=>{
+  const params=new URL(route.request().url()).searchParams,minutes=Number(params.get('minutes'));
+  requested.push([minutes,params.get('as_of')]);
+  return route.fulfill({json:{...trendSample(minutes),end}});
+ });
  await page.goto('/?mode=normal');await page.locator('#graph-mode').click();await expect(page.locator('#graph-screen')).toBeVisible();await expect(page.locator('#graph-temperature')).toHaveText('123.4');await expect(page.locator('.candles .candle')).toHaveCount(60);
  for(const [minutes,count]of[[5,12],[10,6],[1,60]]){await page.getByRole('button',{name:minutes+'분봉',exact:true}).click();await expect(page.locator('.candles .candle')).toHaveCount(count);await expect(page.locator(`[data-minutes="${minutes}"]`)).toHaveAttribute('aria-pressed','true');}
- expect(requested).toEqual([1,5,10,1]);await page.locator('#trend-chart').focus();await page.locator('#trend-chart').press('End');await expect(page.locator('#graph-detail')).toContainText('최고');await expect(page.locator('#graph-detail')).toContainText('마지막');
+ expect(requested).toEqual([[1,null],[5,end],[10,end],[1,end]]);await page.locator('#trend-chart').focus();await page.locator('#trend-chart').press('End');await expect(page.locator('#graph-detail')).toContainText('최고');await expect(page.locator('#graph-detail')).toContainText('마지막');
  await page.locator('#graph-fullscreen').click();await expect(page.locator('body')).toHaveAttribute('data-mode','graph');await expect(page.locator('#graph-temperature')).toBeVisible();await expect(page.locator('#trend-chart')).toBeVisible();
 });
 test('empty graph never invents a 38-degree history candle',async({page})=>{
@@ -228,7 +232,7 @@ test('setup is collapsed and only the custom palette reveals a colour picker',as
  await page.reload();await page.locator('#settings-open').click();await expect(page.locator('#color')).toHaveValue('custom');await expect(page.locator('#custom-color')).toHaveValue('#26a9e0');
 });
 test('failed and missing graph periods occupy a separate quality strip and estimates stay distinct',async({page})=>{
- const data=trendSample();data.bars[0]={...data.bars[0],count:0,invalid_count:2,open:null,close:null,high:null,low:null};data.bars[1]={...data.bars[0],time:data.bars[1].time,invalid_count:0};data.bars[2].invalid_count=1;data.samples=58;data.invalid_samples=3;
+ const data=trendSample();data.bars[0]={...data.bars[0],count:0,invalid_count:2,open:null,close:null,high:null,low:null};data.bars[1]={...data.bars[0],time:data.bars[1].time,invalid_count:0,empty_state:'overdue'};data.bars[2].invalid_count=1;data.samples=58;data.invalid_samples=3;
  data.estimates=[{estimated:true,value_c:130,based_on_value_c:125,based_on_at:data.bars[2].time,estimated_at:data.bars[3].time}];
  await page.route('**/api/latest',r=>r.fulfill({json:sample()}));await page.route('**/api/trend**',r=>r.fulfill({json:data}));await page.goto('/?mode=graph');
  await expect(page.locator('#graph-measured')).toHaveText('58');await expect(page.locator('#graph-failed')).toHaveText('3');await expect(page.locator('#graph-missing')).toHaveText('1');await expect(page.locator('#graph-estimated')).toHaveText('1');
@@ -257,7 +261,11 @@ test('monitor and graph fit phone, narrow desktop and TV with visible status dis
  await page.route('**/api/latest',r=>r.fulfill({json:sample()}));await page.route('**/api/trend**',r=>r.fulfill({json:trendSample()}));
  for(const size of [{width:390,height:844},{width:887,height:1200},{width:1920,height:1080}]){
   await page.setViewportSize(size);await page.goto('/?mode=normal');await expect(page.locator('#reading-age')).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:`test-results/normal-${size.width}.png`,fullPage:true});
-  await page.locator('#graph-mode').click();await expect(page.locator('#graph-measured')).toHaveText('60');await expect(page.locator('#quality-chart')).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);const tip=await page.locator('#graph-tooltip').boundingBox(),plot=await page.locator('#chart-wrap').boundingBox();expect(tip.x).toBeGreaterThanOrEqual(plot.x);expect(tip.x+tip.width).toBeLessThanOrEqual(plot.x+plot.width+1);await page.screenshot({path:`test-results/graph-${size.width}.png`,fullPage:true});
+  await page.locator('#graph-mode').click();await expect(page.locator('#graph-measured')).toHaveText('60');await expect(page.locator('#quality-chart')).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await expect(page.locator('#graph-tooltip')).toBeHidden();
+  await page.locator('#trend-chart').press('End');
+  const tip=await page.locator('#graph-tooltip').boundingBox(),plot=await page.locator('#chart-wrap').boundingBox();
+  expect(tip.x).toBeGreaterThanOrEqual(plot.x);expect(tip.x+tip.width).toBeLessThanOrEqual(plot.x+plot.width+1);await page.screenshot({path:`test-results/graph-${size.width}.png`,fullPage:true});
  }
 });
 
@@ -265,4 +273,61 @@ test('graph fetch errors visibly distinguish failed initial loading from retaine
  let offline=true;await page.route('**/api/latest',r=>r.fulfill({json:sample()}));await page.route('**/api/trend**',r=>offline?r.abort():r.fulfill({json:trendSample()}));
  await page.goto('/?mode=graph');await expect(page.locator('#graph-empty')).toContainText('불러오지');await expect(page.locator('#graph-data-notice')).toBeVisible();await expect(page.locator('.candle')).toHaveCount(0);
  offline=false;await page.locator('#graph-refresh').click();await expect(page.locator('.candle')).toHaveCount(60);await expect(page.locator('#graph-data-notice')).toBeHidden();offline=true;await page.locator('#graph-refresh').click();await expect(page.locator('#graph-data-notice')).toContainText('마지막 조회');await expect(page.locator('.candle')).toHaveCount(60);
+});
+
+test('graph refresh updates the header and history independently and preserves a pinned candle',async({page})=>{
+ let temperature=123.4,latestOffline=false,trendOffline=false,trendReads=0;
+ const data=trendSample();
+ await page.route('**/api/latest',r=>latestOffline?r.abort():r.fulfill({json:sample({value_c:temperature})}));
+ await page.route('**/api/trend**',r=>{
+  trendReads++;
+  return trendOffline?r.abort():r.fulfill({json:data});
+ });
+ await page.goto('/?mode=graph');
+ await expect(page.locator('#graph-temperature')).toHaveText('123.4');
+ await expect(page.locator('.candle')).toHaveCount(60);
+ await expect(page.locator('#graph-tooltip')).toBeHidden();
+ await page.locator('#trend-chart').press('Home');
+ await expect(page.locator('#graph-tooltip')).toBeVisible();
+ const pinned=await page.locator('#graph-detail').textContent();
+ temperature=131.6;
+ await page.locator('#graph-refresh').click();
+ await expect(page.locator('#graph-temperature')).toHaveText('131.6');
+ await expect(page.locator('#graph-refresh-status')).toHaveText('최신 온도 갱신 · 그래프 이력 갱신');
+ await expect(page.locator('#graph-detail')).toHaveText(pinned);
+ await expect(page.locator('#graph-tooltip')).toBeHidden();
+ expect(trendReads).toBe(2);
+ latestOffline=true;
+ await page.locator('#graph-refresh').click();
+ await expect(page.locator('#graph-refresh-status')).toHaveText('최신 온도 조회 실패 · 그래프 이력 갱신');
+ latestOffline=false;trendOffline=true;
+ await page.locator('#graph-refresh').click();
+ await expect(page.locator('#graph-refresh-status')).toHaveText('최신 온도 갱신 · 그래프 이력 조회 실패');
+});
+
+test('one-minute chart bridges only short bounded gaps and keeps quality and measured statistics separate',async({page})=>{
+ const data=trendSample();
+ const gaps=new Map([[0,'unknown'],[3,'overdue'],[6,'failed'],[7,'scheduled'],[11,'overdue'],[12,'overdue'],[13,'overdue'],[18,'failed'],[59,'pending']]);
+ for(const [index,state] of gaps){
+  Object.assign(data.bars[index],{open:null,close:null,high:null,low:null,count:0,invalid_count:state==='failed'?1:0,empty_state:state,complete:state!=='pending'});
+ }
+ data.estimates=[{value_c:118,based_on_value_c:117,based_on_at:data.bars[17].time,estimated_at:data.bars[18].time}];
+ data.samples=60-gaps.size;
+ data.invalid_samples=2;
+ await page.route('**/api/latest',r=>r.fulfill({json:sample()}));
+ await page.route('**/api/trend**',r=>r.fulfill({json:data}));
+ await page.goto('/?mode=graph');
+ await expect(page.locator('.chart-bridge')).toHaveCount(2);
+ await expect(page.locator('#graph-bridge-legend')).toBeVisible();
+ await expect(page.locator('.chart-estimate')).toHaveCount(1);
+ await expect(page.locator('.candle')).toHaveCount(data.samples);
+ await expect(page.locator('#graph-measured')).toHaveText(String(data.samples));
+ await expect(page.locator('#graph-failed')).toHaveText('2');
+ await expect(page.locator('#graph-missing')).toHaveText('4');
+ await expect(page.locator('#graph-high')).toHaveText(data.high.toFixed(1)+' ℃');
+ await expect(page.locator('.quality-scheduled')).toHaveCount(1);
+ await expect(page.locator('.quality-unknown')).toHaveCount(1);
+ await expect(page.locator('.quality-pending')).toHaveCount(1);
+ await page.locator('#trend-chart').press('End');
+ await expect(page.locator('#graph-detail')).toContainText('기록 대기 중');
 });

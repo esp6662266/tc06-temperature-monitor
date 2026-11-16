@@ -176,7 +176,13 @@ export function createAPI(getStore) {
       if (action === 'retention') return json({ retention_days: RETENTION_DAYS, oldest_day: oldestDay(), timezone: 'Asia/Seoul',
         cleanup_schedule: '매시 15분', last_cleanup: await store.get('maintenance/retention', { type: 'json' }) });
       if (action === 'trend') {
-        const result=await getTrend(store,{day:url.searchParams.get('day')||dayKST(Date.now()),minutes:Number(url.searchParams.get('minutes')||1),span:Number(url.searchParams.get('span')||360)});
+        const now=Date.now();
+        const result=await getTrend(store,{
+          day:url.searchParams.get('day')||dayKST(now),
+          minutes:Number(url.searchParams.get('minutes')||1),
+          span:Number(url.searchParams.get('span')||360),
+          asOf:url.searchParams.get('as_of'),
+        },now);
         return json(result,result.status||200);
       }
       if (action === 'history') {

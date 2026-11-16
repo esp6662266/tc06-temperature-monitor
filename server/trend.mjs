@@ -1,9 +1,13 @@
 import { estimateFailures } from './estimate.mjs';
 import { dayKST, oldestDay } from './retention.mjs';
+import { annotateTrendQuality } from './trend-quality.mjs';
 const DAY = 86400_000;
 const MAX_ROWS = 3000;
 const summaryKey = day => `trend/${day}`;
-const tuple = row => [Date.parse(row.captured_at), row.status === 'ok' ? row.value_c : null, row.status, Date.parse(row.recorded_at), row.device_id];
+const tuple = row => [
+  Date.parse(row.captured_at), row.status === 'ok' ? row.value_c : null, row.status,
+  Date.parse(row.recorded_at), row.device_id, row.record_interval_seconds ?? null,
+];
 export function validDay(day) {
   return /^\d{4}-\d{2}-\d{2}$/.test(day || '') && Number.isFinite(Date.parse(day)) && new Date(day).toISOString().slice(0,10) === day;
 }
@@ -38,22 +42,28 @@ export async function readDay(store, day) {
   for(let i=0;i<keys.length;i+=40) rows.push(...(await Promise.all(keys.slice(i,i+40).map(key=>store.get(key,{type:'json',consistency:'strong'})))).filter(Boolean));
   return mergeTrend(store,day,rows,true);
 }
-export function trendWindow({day,minutes=1,span=360}, now=Date.now()) {
+export function trendWindow({day,minutes=1,span=360,asOf}, now=Date.now()) {
   const today=dayKST(now);
   if(!validDay(day)||day>today||![1,5,10].includes(minutes)||![60,360,1440].includes(span)) return {error:'Invalid trend date / interval / span',status:400};
   if(day<oldestDay(now)) return {error:'30일 보관 기간이 지난 날짜입니다',status:410};
-  const end=day===today?now:Date.parse(day+'T00:00:00+09:00')+DAY;
+  const dayStart=Date.parse(day+'T00:00:00+09:00');
+  const latestEnd=day===today?now:dayStart+DAY;
+  const end=asOf==null?latestEnd:Date.parse(asOf);
+  if(asOf!=null&&(!Number.isFinite(end)||new Date(end).toISOString()!==asOf||end<dayStart||end>latestEnd)){
+    return {error:'그래프 종료 시각이 조회 날짜의 유효한 범위를 벗어났습니다',status:400};
+  }
   const period=minutes*60000;
-  const start=Math.max(Math.floor((end-span*60000)/period)*period,Date.parse(oldestDay(now)+'T00:00:00+09:00'));
-  return {start,end,period};
+  const start=Math.max(end-span*60000,Date.parse(oldestDay(now)+'T00:00:00+09:00'));
+  const bucketStart=Math.floor(start/period)*period;
+  return {start,end,period,bucketStart};
 }
-export function aggregateTrend(entries,{start,end,period},now=Date.now()) {
+export function aggregateTrend(entries,{start,end,period,bucketStart}) {
   const bars=[];
-  for(let at=start;at<end;at+=period) bars.push({time:new Date(at).toISOString(),open:null,high:null,low:null,close:null,count:0,invalid_count:0,complete:at+period<=now});
+  for(let at=bucketStart;at<end;at+=period) bars.push({time:new Date(at).toISOString(),open:null,high:null,low:null,close:null,count:0,invalid_count:0,complete:at+period<=end});
   entries.sort((a,b)=>a[1][0]-b[1][0]||a[1][3]-b[1][3]||a[0].localeCompare(b[0]));
   for(const [,row] of entries){
     const [time,value,status]=row;if(time<start||time>=end)continue;
-    const bar=bars[Math.floor((time-start)/period)];
+    const bar=bars[Math.floor((time-bucketStart)/period)];
     if(status!=='ok'||!Number.isFinite(value)){bar.invalid_count++;continue;}
     if(!bar.count)bar.open=bar.high=bar.low=value;
     bar.high=Math.max(bar.high,value);bar.low=Math.min(bar.low,value);bar.close=value;bar.count++;
@@ -62,11 +72,13 @@ export function aggregateTrend(entries,{start,end,period},now=Date.now()) {
 }
 export async function getTrend(store,options,now=Date.now()) {
   const window=trendWindow(options,now);if(window.error)return window;
-  const contextStart=Math.max(window.start-6*60000,Date.parse(oldestDay(now)+'T00:00:00+09:00'));
+  // Include the preceding hourly schedule and its grace period at midnight.
+  const contextStart=Math.max(window.start-61*60000,Date.parse(oldestDay(now)+'T00:00:00+09:00'));
   const days=[];for(let at=Date.parse(dayKST(contextStart)+'T00:00:00+09:00');at<window.end;at+=DAY)days.push(dayKST(at));
   const summaries=await Promise.all(days.map(day=>readDay(store,day)));
   const entries=summaries.flatMap(summary=>Object.entries(summary.rows));
-  const bars=aggregateTrend(entries,window,now);
+  const bars=aggregateTrend(entries,window);
+  annotateTrendQuality(bars,entries,window,now);
   const estimates=estimateFailures(entries,window);
   const valid=bars.filter(bar=>bar.count);
   return {day:options.day,minutes:options.minutes,span:options.span,timezone:'Asia/Seoul',server_now:new Date(now).toISOString(),

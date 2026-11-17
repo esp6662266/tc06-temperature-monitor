@@ -40,7 +40,13 @@
   </main>
   <section id="graph-screen" aria-label="TC-06 온도 추이 그래프" hidden>
     <header class="graph-header"><div><span id="graph-reading-label" class="eyebrow">TC-06 · 온도 확인 중</span><div class="graph-reading"><strong id="graph-temperature">—</strong><span>℃</span><span id="graph-quality" class="badge">불러오는 중</span></div><p id="graph-current-status" class="note">수신 상태 확인 중</p></div><div class="graph-navigation"><button id="graph-to-display" class="secondary">숫자 화면</button><button id="graph-to-normal" class="secondary">일반 화면</button><button id="graph-settings" class="secondary">설정</button><button id="graph-speech" class="secondary">음성 시작</button><button id="graph-fullscreen">전체 화면</button></div></header>
-    <div class="graph-toolbar"><div class="graph-intervals" role="group" aria-label="봉 간격"><button data-minutes="1" aria-pressed="true">1분봉</button><button data-minutes="5" aria-pressed="false">5분봉</button><button data-minutes="10" aria-pressed="false">10분봉</button></div><label>조회 범위<select id="graph-span"><option value="60">최근 1시간</option><option value="360" selected>최근 6시간</option><option value="1440">최근 24시간</option></select></label><label>기준 날짜<input id="graph-day" type="date"></label><button id="graph-live" class="secondary">오늘</button><button id="graph-refresh" class="secondary" aria-describedby="graph-refresh-status">새로고침</button></div>
+    <div class="graph-toolbar">
+      <div class="graph-intervals" role="group" aria-label="봉 간격"><button data-minutes="1" aria-pressed="true">1분봉</button><button data-minutes="5" aria-pressed="false">5분봉</button><button data-minutes="10" aria-pressed="false">10분봉</button></div>
+      <label>조회 범위<select id="graph-span"><option value="60">최근 1시간</option><option value="360" selected>최근 6시간</option><option value="1440">최근 24시간</option></select></label>
+      <label>기준 날짜<input id="graph-day" type="date"></label>
+      <button id="graph-live" class="secondary">오늘</button><button id="graph-refresh" class="secondary" aria-describedby="graph-refresh-status">새로고침</button>
+      <label>그래프 배경<select id="graph-theme"><option value="dark">어두운 배경</option><option value="light">흰 배경 · 컬러 선</option></select></label>
+    </div>
     <p id="graph-refresh-status" role="status" hidden></p>
     <p id="graph-data-notice" role="status" hidden></p>
     <div class="graph-counts" aria-label="조회 구간 집계"><div><span>실측 기록</span><strong id="graph-measured">—</strong><small>건</small></div><div><span>판독 실패 기록</span><strong id="graph-failed">—</strong><small>건</small></div><div><span>기록 예정 초과</span><strong id="graph-missing">—</strong><small>구간</small></div><div><span>추정 표시</span><strong id="graph-estimated">—</strong><small>건</small></div></div>

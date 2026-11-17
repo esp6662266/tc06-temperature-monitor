@@ -62,3 +62,49 @@ body[data-mode=display] #display-menu:not([hidden])~#display-held{visibility:hid
 .quality-key.unknown,.quality-unknown{background:#51606f;fill:#51606f}
 #graph-refresh-status{margin:0;color:var(--muted);font-size:13px;line-height:1.5}
 #graph-refresh-status[data-state="error"]{color:var(--warning)}
+
+#graph-screen[data-theme="light"] {
+  --chart-paper:#fff;
+  --chart-ink:#24384a;
+  --chart-up:#a23c00;
+  --chart-down:#0058a9;
+  --chart-flat:#475569;
+  --chart-gap:#526777;
+  --chart-long-gap:#637989;
+  --chart-estimate:#ae2f74;
+  --chart-reference:#6945a5;
+}
+[data-theme="light"] #chart-wrap {
+  background:var(--chart-paper);
+  border-color:#b6c5d1;
+}
+[data-theme="light"] .chart-grid line {stroke:#d3dee7}
+[data-theme="light"] .chart-grid text {fill:var(--chart-ink)}
+[data-theme="light"] .chart-close {stroke:#006346;stroke-width:2.4;opacity:1}
+[data-theme="light"] .wick.up {stroke:var(--chart-up)}
+[data-theme="light"] .wick.down {stroke:var(--chart-down)}
+[data-theme="light"] .wick.flat {stroke:var(--chart-flat)}
+[data-theme="light"] .candle.up {fill:var(--chart-up)}
+[data-theme="light"] .candle.down {fill:var(--chart-down)}
+[data-theme="light"] .candle.flat {fill:var(--chart-flat)}
+[data-theme="light"] .chart-bridge {stroke:var(--chart-gap)}
+[data-theme="light"] .chart-bridge-long {stroke:var(--chart-long-gap)}
+[data-theme="light"] .chart-estimate,
+[data-theme="light"] .estimate-point {stroke:var(--chart-estimate)}
+[data-theme="light"] .estimate-point {fill:var(--chart-paper)}
+[data-theme="light"] .chart-target {stroke:var(--chart-reference)}
+[data-theme="light"] .reference-label {fill:var(--chart-reference)}
+[data-theme="light"] .chart-cross {stroke:var(--chart-ink)}
+[data-theme="light"] #graph-empty {color:var(--chart-ink)}
+[data-theme="light"] .chart-legend {
+  padding:4px 8px;
+  border-radius:6px;
+  background:var(--chart-paper);
+  color:var(--chart-ink);
+}
+[data-theme="light"] .legend-up {background:var(--chart-up)}
+[data-theme="light"] .legend-down {background:var(--chart-down)}
+[data-theme="light"] .legend-flat {background:var(--chart-flat)}
+[data-theme="light"] .chart-legend .legend-bridge {border-top-color:var(--chart-gap)}
+[data-theme="light"] .chart-legend .legend-bridge-long {border-top-color:var(--chart-long-gap)}
+[data-theme="light"] .legend-estimate {border-color:var(--chart-estimate)}

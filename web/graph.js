@@ -43,7 +43,18 @@
           this.select(next);
         }});
       if('ResizeObserver'in window)new ResizeObserver(()=>this.draw()).observe($('chart-wrap'));else window.addEventListener('resize',()=>this.draw());
-      this.setupOptions();this.controls();
+      this.setupTheme();this.setupOptions();this.controls();
+    }
+    setupTheme(){
+      const select=$('graph-theme');
+      if(!select)return;
+      const screen=$('graph-screen'),key='tc06-graph-theme';
+      try{if(localStorage.getItem(key)==='light')select.value='light';}catch{}
+      screen.dataset.theme=select.value;
+      select.addEventListener('change',()=>{
+        screen.dataset.theme=select.value;
+        try{localStorage.setItem(key,select.value);}catch{}
+      });
     }
     validOptions(options){
       const finite=value=>typeof value==='number'&&Number.isFinite(value)&&Math.abs(value)<=9999.9;

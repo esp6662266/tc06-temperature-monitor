@@ -96,3 +96,29 @@ test('URL timeframe continues to take precedence over saved preferences',async({
   await expect(page.locator('#axis-mode')).toHaveValue('auto');
   expect(requests.trend).toEqual([{minutes:10,span:1440}]);
 });
+
+test('white graph background switches to readable colors and persists after reload',async({page})=>{
+  const requests=await mockReadings(page);
+  await expectInitialized(page,'graph',requests);
+  const theme=page.getByRole('combobox',{name:'그래프 배경',exact:true});
+  const plot=page.locator('#chart-wrap');
+  const measuredLine=page.locator('.chart-close');
+  const flatCandle=page.locator('.candle.flat');
+  await expect(theme).toHaveValue('dark');
+  await expect(plot).toHaveCSS('background-color','rgb(12, 23, 35)');
+  await expect(measuredLine).toHaveCSS('stroke','rgb(85, 229, 182)');
+
+  await theme.selectOption('light');
+  await expect(plot).toHaveCSS('background-color','rgb(255, 255, 255)');
+  await expect(measuredLine).toHaveCSS('stroke','rgb(0, 99, 70)');
+  await expect(flatCandle).toHaveCSS('fill','rgb(71, 85, 105)');
+  expect(requests.trend).toHaveLength(1);
+
+  await page.reload();
+  await expect(theme).toHaveValue('light');
+  await expect(plot).toHaveCSS('background-color','rgb(255, 255, 255)');
+  await expect(measuredLine).toHaveCSS('stroke','rgb(0, 99, 70)');
+  await theme.selectOption('dark');
+  await expect(plot).toHaveCSS('background-color','rgb(12, 23, 35)');
+  await expect(measuredLine).toHaveCSS('stroke','rgb(85, 229, 182)');
+});

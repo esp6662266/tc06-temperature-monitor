@@ -49,7 +49,9 @@
       const select=$('graph-theme');
       if(!select)return;
       const screen=$('graph-screen'),key='tc06-graph-theme';
-      try{if(localStorage.getItem(key)==='light')select.value='light';}catch{}
+      let theme='light';
+      try{if(localStorage.getItem(key)==='dark')theme='dark';}catch{}
+      select.value=theme;
       screen.dataset.theme=select.value;
       select.addEventListener('change',()=>{
         screen.dataset.theme=select.value;

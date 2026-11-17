@@ -45,6 +45,7 @@
       <label>조회 범위<select id="graph-span"><option value="60">최근 1시간</option><option value="360" selected>최근 6시간</option><option value="1440">최근 24시간</option></select></label>
       <label>기준 날짜<input id="graph-day" type="date"></label>
       <button id="graph-live" class="secondary">오늘</button><button id="graph-refresh" class="secondary" aria-describedby="graph-refresh-status">새로고침</button>
+      <span id="graph-refresh-countdown" role="timer">다음 갱신 <strong id="graph-refresh-seconds">—</strong></span>
       <label>그래프 테마<select id="graph-theme"><option value="light">흰색 · 컬러 선</option><option value="dark">다크 모드</option></select></label>
     </div>
     <p id="graph-refresh-status" role="status" hidden></p>

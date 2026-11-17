@@ -62,6 +62,8 @@ body[data-mode=display] #display-menu:not([hidden])~#display-held{visibility:hid
 .quality-key.unknown,.quality-unknown{background:#51606f;fill:#51606f}
 #graph-refresh-status{margin:0;color:var(--muted);font-size:13px;line-height:1.5}
 #graph-refresh-status[data-state="error"]{color:var(--warning)}
+#graph-refresh-countdown{color:var(--muted);font-size:13px;white-space:nowrap;font-variant-numeric:tabular-nums}
+#graph-refresh-seconds{display:inline-block;min-width:4ch;color:var(--text)}
 
 body[data-mode="graph"]:has(#graph-screen[data-theme="light"]) {background:#fff}
 #graph-screen[data-theme="light"] {

@@ -90,11 +90,52 @@ test('empty graph never invents a 38-degree history candle',async({page})=>{
  await page.route('**/api/latest',route=>route.fulfill({json:{record:null,server_now:new Date().toISOString()}}));await page.route('**/api/trend**',route=>route.fulfill({json:trendSample(5,true)}));
  await page.goto('/?mode=graph&minutes=5');await expect(page.locator('#graph-temperature')).toHaveText('38');await expect(page.locator('#graph-quality')).toContainText('기본 표시값');await expect(page.locator('#graph-empty')).toBeVisible();await expect(page.locator('.candle')).toHaveCount(0);await expect(page.locator('#graph-low')).toHaveText('—');
 });
-test('graph refreshes each minute and preserves labelled historical data on connection failure',async({page})=>{
- let offline=false,version=0;await page.route('**/api/latest',route=>offline?route.abort():route.fulfill({json:sample()}));
- await page.route('**/api/trend**',route=>{if(offline)return route.abort();const data=trendSample();data.high=150+version;return route.fulfill({json:data});});
- await page.clock.install();await page.goto('/?mode=graph');await expect(page.locator('#graph-high')).toHaveText('150.0 ℃');version=1;await page.clock.fastForward(60001);await expect(page.locator('#graph-high')).toHaveText('151.0 ℃');
- offline=true;await page.evaluate(()=>Promise.all([refresh(),graph.load(true)]));await expect(page.locator('#graph-temperature')).toHaveText('123.4');await expect(page.locator('#graph-quality')).toContainText('마지막 정상값');await expect(page.locator('#graph-status')).toContainText('마지막 조회');await expect(page.locator('.candle')).toHaveCount(60);
+test('graph refreshes at each minute boundary and preserves labelled historical data on connection failure',async({page})=>{
+  let offline=false,latestRequests=0,trendRequests=0,releaseLatest;
+  await page.route('**/api/latest',async route=>{
+    if(offline)return route.abort();
+    const value=123.4+latestRequests++;
+    await new Promise(resolve=>{releaseLatest=resolve;});
+    const at=new Date(await page.evaluate(()=>Date.now())).toISOString();
+    return route.fulfill({json:{...sample({value_c:value,captured_at:at,received_at:at}),server_now:at,collection_settings:{interval_seconds:60,revision:1}}});
+  });
+  await page.route('**/api/trend**',route=>{
+    if(offline)return route.abort();
+    const data=trendSample();data.high=150+trendRequests++;
+    return route.fulfill({json:data});
+  });
+  // Opening at :34.350 puts the first boundary within the chart's 30-second cache window.
+  const minuteStart=Math.floor(Date.now()/60000)*60000;
+  await page.clock.install({time:minuteStart});
+  await page.clock.pauseAt(minuteStart+34350);
+  await page.goto('/?mode=graph');
+  const countdown=page.locator('#graph-refresh-seconds');
+  await expect(countdown).toBeVisible();
+  await expect(countdown).toHaveText('26초');
+
+  for(const [minute,toBoundary] of [0,20650,55000].entries()){
+    if(toBoundary){
+      await page.clock.fastForward(toBoundary-1000);
+      await expect(countdown).toHaveText('1초');
+      expect(latestRequests).toBe(minute);
+      expect(trendRequests).toBe(minute);
+      await page.clock.fastForward(1000);
+      await expect(countdown).toHaveText('60초');
+    }
+    await expect(page.locator('#graph-high')).toHaveText(`${(150+minute).toFixed(1)} ℃`);
+    await expect.poll(()=>latestRequests).toBe(minute+1);
+    expect(trendRequests).toBe(minute+1);
+    await page.clock.fastForward(5000);
+    releaseLatest();
+    await expect(page.locator('#graph-temperature')).toHaveText((123.4+minute).toFixed(1));
+  }
+
+  offline=true;
+  await page.evaluate(()=>Promise.all([refresh(),graph.load(true)]));
+  await expect(page.locator('#graph-temperature')).toHaveText('125.4');
+  await expect(page.locator('#graph-quality')).toContainText('마지막 정상값');
+  await expect(page.locator('#graph-status')).toContainText('마지막 조회');
+  await expect(page.locator('.candle')).toHaveCount(60);
 });
 test('graph date, range and navigation work without login',async({page})=>{
  await page.route('**/api/trend**',route=>route.fulfill({json:trendSample(10)}));await page.goto('/?mode=graph&minutes=10&span=1440');

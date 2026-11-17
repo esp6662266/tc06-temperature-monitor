@@ -21,15 +21,42 @@
       const query=new URLSearchParams(location.search);
       this.minutes=Number(query.get('minutes')||saved.minutes||1);if(![1,5,10].includes(this.minutes))this.minutes=1;
       this.span=Number(query.get('span')||saved.span||360);if(![60,360,1440].includes(this.span))this.span=360;
-      $('graph-day').value=day(this.now());$('graph-span').value=String(this.span);
+      const currentTime = this.now();
+      const today = day(currentTime);
+      const dateInput = $('graph-day');
+      dateInput.value = query.get('day') || today;
+      if (!dateInput.value) dateInput.value = today;
+      const at = Date.parse(query.get('at'));
+      this.anchorEnd = null;
+      // The trend endpoint excludes its end timestamp. Keep the selected record inside the window.
+      if (Number.isFinite(at) && at < currentTime && day(at) === dateInput.value) {
+        this.anchorEnd = new Date(at + 1).toISOString();
+        this.selectedAt = at;
+      }
+      this.followToday = !this.anchorEnd && dateInput.value === today;
+      $('graph-span').value=String(this.span);
       for(const button of document.querySelectorAll('[data-minutes]'))button.addEventListener('click',()=>{
         const minutes=Number(button.dataset.minutes);
         if(minutes===this.minutes)return;
         this.minutes=minutes;this.save();this.load(true,true);
       });
-      $('graph-span').addEventListener('change',()=>{this.selectedAt=null;this.span=Number($('graph-span').value);this.save();this.load(true);});
-      $('graph-day').addEventListener('change',()=>{this.selectedAt=null;this.followToday=$('graph-day').value===day(this.now());if(!this.followToday){this.span=1440;$('graph-span').value='1440';}this.save();this.load(true);});
-      $('graph-live').addEventListener('click',()=>{this.selectedAt=null;this.followToday=true;$('graph-day').value=day(this.now());this.load(true);});
+      $('graph-span').addEventListener('change',()=>{if(!this.anchorEnd)this.selectedAt=null;this.span=Number($('graph-span').value);this.save();this.load(true);});
+      dateInput.addEventListener('change', () => {
+        this.clearAnchor();
+        this.followToday = dateInput.value === day(this.now());
+        if (!this.followToday) {
+          this.span = 1440;
+          $('graph-span').value = '1440';
+        }
+        this.save();
+        this.load(true);
+      });
+      $('graph-live').addEventListener('click', () => {
+        this.clearAnchor();
+        this.followToday = true;
+        dateInput.value = day(this.now());
+        this.load(true);
+      });
       const svg=$('trend-chart');
       svg.addEventListener('pointermove',event=>{if(event.pointerType==='mouse')this.pick(event);});
       svg.addEventListener('pointerleave',()=>this.showSelection());
@@ -44,6 +71,15 @@
         }});
       if('ResizeObserver'in window)new ResizeObserver(()=>this.draw()).observe($('chart-wrap'));else window.addEventListener('resize',()=>this.draw());
       this.setupTheme();this.setupOptions();this.controls();
+    }
+    clearAnchor() {
+      this.anchorEnd = null;
+      this.selectedAt = null;
+      const url = new URL(location.href);
+      if (!url.searchParams.has('day') && !url.searchParams.has('at')) return;
+      url.searchParams.delete('day');
+      url.searchParams.delete('at');
+      history.replaceState(null, '', url);
     }
     setupTheme(){
       const select=$('graph-theme');
@@ -87,10 +123,11 @@
       if(document.body.dataset.mode!=='graph'||document.hidden)return false;
       if(this.followToday)$('graph-day').value=day(this.now());
       const date=$('graph-day').value;if(!date)return false;
-      const key=`${date}/${this.minutes}/${this.span}`;
+      const key=`${date}/${this.minutes}/${this.span}/${this.anchorEnd||''}`;
       const rangeKey=`${date}/${this.span}`;
       const params=new URLSearchParams({day:date,minutes:this.minutes,span:this.span});
-      if(keepWindow&&this.followToday&&this.lastWindow?.key===rangeKey)params.set('as_of',this.lastWindow.end);
+      if(this.anchorEnd)params.set('as_of',this.anchorEnd);
+      else if(keepWindow&&this.followToday&&this.lastWindow?.key===rangeKey)params.set('as_of',this.lastWindow.end);
       const requestKey=params.toString();
       if(this.pendingKey===requestKey&&this.pending)return this.pending;
       if(!force&&this.key===key&&Date.now()-this.loadedAt<30000){this.draw();return !this.error;}

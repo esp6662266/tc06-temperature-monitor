@@ -3,7 +3,7 @@
   "version": "0.7.0",
   "description": "Read-only TC-06 OCR collector, Netlify storage API and Korean voice dashboard",
   "scripts": {
-    "test": "node --test tests/api.test.mjs tests/retention.test.mjs tests/voice.test.mjs tests/trend.test.mjs tests/trend-quality.test.mjs tests/estimate.test.mjs tests/updates.test.mjs tests/collection.test.mjs",
+    "test": "node --test tests/api.test.mjs tests/retention.test.mjs tests/voice.test.mjs tests/trend.test.mjs tests/trend-quality.test.mjs tests/estimate.test.mjs tests/updates.test.mjs tests/collection.test.mjs tests/analysis.test.mjs",
     "test:web": "playwright test",
     "dev": "node server/dev.mjs"
   },

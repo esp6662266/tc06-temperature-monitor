@@ -199,7 +199,7 @@ test('short forecasts are explicitly labelled in normal, numeric and graph scree
  await page.locator('#display-mode').click();await expect(page.locator('#display-held')).toBeVisible();await expect(page.locator('#display-held')).toContainText('추정값 · 마지막 실측');await page.keyboard.press('Enter');await page.locator('#display-to-graph').click();await expect(page.locator('#graph-temperature')).toHaveText('≈605.0');await expect(page.locator('#graph-reading-label')).toContainText('추정 온도');
 });
 test('forecasts expire at two minutes without waiting for another server response',async({page})=>{
- const now=Date.now(),body=forecastSample(now,90000);await page.clock.install({time:now});await page.route('**/api/latest',r=>r.fulfill({json:body}));await page.goto('/?mode=display');await expect(page.locator('#temperature')).toHaveText('≈605.0');await page.clock.fastForward(31000);await expect(page.locator('#temperature')).toHaveText('600.0');await expect(page.locator('#display-held')).toContainText('마지막 정상값');
+ const now=Math.floor(Date.now()/60000)*60000+5000,body=forecastSample(now,90000);await page.clock.install({time:now});await page.route('**/api/latest',r=>r.fulfill({json:body}));await page.goto('/?mode=display');await expect(page.locator('#temperature')).toHaveText('≈605.0');await page.clock.fastForward(31000);await expect(page.locator('#temperature')).toHaveText('600.0');await expect(page.locator('#display-held')).toContainText('마지막 정상값');
 });
 test('API failure immediately drops forecasts and reload keeps only the real last normal',async({page})=>{
  let offline=false;await page.route('**/api/latest',r=>offline?r.abort():r.fulfill({json:forecastSample()}));await page.goto('/?mode=normal');await expect(page.locator('#temperature')).toHaveText('≈605.0');

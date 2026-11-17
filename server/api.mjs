@@ -1,4 +1,5 @@
 import { updateTrend, getTrend, readDay } from './trend.mjs';
+import { getAnalysis } from './analysis.mjs';
 import { estimateAt, ESTIMATE_STATUSES, MAX_ESTIMATE_MS } from './estimate.mjs';
 import { RETENTION_DAYS, dayKST, oldestDay, expired } from './retention.mjs';
 import { collectionSettings, validInterval } from './collection.mjs';
@@ -184,6 +185,16 @@ export function createAPI(getStore) {
           asOf:url.searchParams.get('as_of'),
         },now);
         return json(result,result.status||200);
+      }
+      if (action === 'analysis') {
+        const result = await getAnalysis(store, {
+          day: url.searchParams.get('day') ?? undefined,
+          days: Number(url.searchParams.get('days') ?? 7),
+          changeC: Number(url.searchParams.get('change_c') ?? 5),
+          windowMinutes: Number(url.searchParams.get('window_minutes') ?? 5),
+          periods: url.searchParams.get('periods') ?? '',
+        });
+        return json(result, result.status || 200);
       }
       if (action === 'history') {
         const day = url.searchParams.get('day') || dayKST(new Date().toISOString());

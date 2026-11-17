@@ -111,7 +111,24 @@ async function start(){
 }
 function stop(){enabled=false;voice.cancel();byId('audio-status').textContent='음성 안내가 꺼져 있습니다.';render();}
 async function fullscreen(mode='display'){if(typeof mode!=='string')mode='display';setMode(mode);try{if(!document.fullscreenElement)await document.documentElement.requestFullscreen();}catch{byId('audio-status').textContent='브라우저 메뉴에서 전체 화면을 선택해 주세요.';}}
-function setMode(mode,save=true){document.activeElement?.blur();document.body.dataset.mode=mode;byId('graph-screen').hidden=mode!=='graph';if(mode==='normal')byId('temperature').style.fontSize='';byId('display-menu').hidden=true;clearTimeout(menuTimer);if(save){const url=new URL(location.href);url.searchParams.set('mode',mode);history.replaceState(null,'',url);}fitNumber();if(mode==='graph'){graph?.draw();graph?.load();}}
+function setMode(mode,save=true){
+  document.activeElement?.blur();
+  document.body.dataset.mode=mode;
+  byId('graph-screen').hidden=mode!=='graph';
+  const analysis=byId('analysis-screen');
+  if(analysis)analysis.hidden=mode!=='analysis';
+  if(mode==='normal')byId('temperature').style.fontSize='';
+  byId('display-menu').hidden=true;
+  clearTimeout(menuTimer);
+  if(save){
+    const url=new URL(location.href);
+    url.searchParams.set('mode',mode);
+    history.replaceState(null,'',url);
+  }
+  fitNumber();
+  if(mode==='graph'){graph?.draw();graph?.load();}
+  if(mode==='analysis')window.TC06Analysis?.open();
+}
 function revealMenu(focusFirst=false){
   if(document.body.dataset.mode!=='display')return;
   const menu=byId('display-menu');menu.hidden=false;clearTimeout(menuTimer);
@@ -130,6 +147,9 @@ byId('speech-start').addEventListener('click',start);byId('speech-stop').addEven
 byId('fullscreen').addEventListener('click',fullscreen);byId('display-fullscreen').addEventListener('click',fullscreen);
 byId('display-mode').addEventListener('click',()=>{setMode('display');fullscreen();});byId('normal-mode').addEventListener('click',()=>setMode('normal'));
 byId('graph-mode').addEventListener('click',()=>setMode('graph'));byId('display-to-graph').addEventListener('click',()=>setMode('graph'));byId('graph-to-display').addEventListener('click',()=>setMode('display'));byId('graph-to-normal').addEventListener('click',()=>setMode('normal'));byId('graph-fullscreen').addEventListener('click',()=>fullscreen('graph'));byId('graph-speech').addEventListener('click',()=>enabled?stop():start());
+for(const id of ['analysis-mode','graph-to-analysis'])byId(id)?.addEventListener('click',()=>setMode('analysis'));
+byId('analysis-to-graph')?.addEventListener('click',()=>setMode('graph'));
+byId('analysis-to-normal')?.addEventListener('click',()=>setMode('normal'));
 byId('display-menu').addEventListener('focusout',event=>{if(!byId('display-menu').contains(event.relatedTarget))revealMenu();});
 document.addEventListener('pointerdown',()=>revealMenu());document.addEventListener('keydown',event=>{
   if(event.key==='Escape'){setMode('normal');return;}
@@ -204,7 +224,7 @@ function checkAutoRefresh(){
 }
 setInterval(()=>{render();if(enabled&&Date.now()>=nextAnnouncement){nextAnnouncement=Date.now()+settings.interval*1000;announce();}},1000);
 graph=new TC06Graph.Graph(()=>Date.now()+serverOffset);
-const initialMode=new URLSearchParams(location.search).get('mode');setMode(['normal','graph'].includes(initialMode)?initialMode:'display',false);applySettings();render();refresh();voice.preload().catch(()=>{});
+const initialMode=new URLSearchParams(location.search).get('mode');setMode(['normal','graph','analysis'].includes(initialMode)?initialMode:'display',false);applySettings();render();refresh();voice.preload().catch(()=>{});
 checkAutoRefresh();
 fetch('/api/retention',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(data=>{if(data?.last_cleanup)byId('retention-status').textContent=`최근 30일 보관 (한국날짜 기준) · 매시 15분 자동 삭제 · 최근 정리 ${formatTime(data.last_cleanup.ran_at)}`;}).catch(()=>{});
 if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});

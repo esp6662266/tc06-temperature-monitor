@@ -3,7 +3,9 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#000000"><title>TC-06 · 현장 온도</title>
-  <link rel="stylesheet" href="/style.css"><script defer src="/voice.js"></script><script defer src="/graph.js"></script><script defer src="/collection.js"></script><script defer src="/app.js"></script>
+  <link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/analysis.css">
+  <script defer src="/voice.js"></script><script defer src="/graph.js"></script><script defer src="/collection.js"></script>
+  <script defer src="/analysis-chart.js"></script><script defer src="/analysis.js"></script><script defer src="/app.js"></script>
 </head>
 <body data-mode="display" data-state="loading">
   <main>
@@ -13,7 +15,7 @@
       <div class="temperature"><span id="temperature">—</span><span class="unit">℃</span></div>
       <p id="reading-age" class="reading-age">마지막 실측 확인 중</p><p id="status" role="status">온도를 불러오는 중입니다.</p>
       <div class="metadata"><div><span>마지막 판독</span><strong id="captured">—</strong></div><div><span>서버 저장</span><strong id="received">—</strong></div><div><span>다음 음성 안내</span><strong id="countdown">꺼짐</strong></div></div>
-      <div class="controls"><button id="speech-start">음성 안내 시작</button><button id="speech-stop" class="secondary" disabled>안내 중지</button><button id="display-mode" class="secondary">숫자 화면</button><button id="graph-mode" class="secondary">온도 그래프</button><button id="settings-open" class="secondary" aria-controls="settings-panel" aria-expanded="false">설정</button><button id="fullscreen" class="secondary">전체 화면</button><button id="refresh-latest" class="secondary" aria-describedby="refresh-status">지금 새로고침</button></div>
+      <div class="controls"><button id="speech-start">음성 안내 시작</button><button id="speech-stop" class="secondary" disabled>안내 중지</button><button id="display-mode" class="secondary">숫자 화면</button><button id="graph-mode" class="secondary">온도 그래프</button><button id="analysis-mode" type="button" class="secondary">온도 분석</button><button id="settings-open" class="secondary" aria-controls="settings-panel" aria-expanded="false">설정</button><button id="fullscreen" class="secondary">전체 화면</button><button id="refresh-latest" class="secondary" aria-describedby="refresh-status">지금 새로고침</button></div>
       <p id="refresh-status" class="note" role="status">온도는 1분마다 자동 조회합니다.</p>
       <p id="audio-status" class="note" role="status">음성 안내 시작을 누르면 웹 숫자 TTS가 1분마다 안내합니다. 운영체제의 한국어 음성 설치는 필요 없습니다.</p>
       <details id="settings-panel" class="settings"><summary>화면 · 음성 설정</summary><p class="note">이 브라우저에 저장됩니다. 색상과 숫자 크기는 숫자 전용 화면에 적용됩니다.</p><div class="settings-grid">
@@ -41,6 +43,7 @@
   <section id="graph-screen" aria-label="TC-06 온도 추이 그래프" data-theme="light" hidden>
     <header class="graph-header"><div><span id="graph-reading-label" class="eyebrow">TC-06 · 온도 확인 중</span><div class="graph-reading"><strong id="graph-temperature">—</strong><span>℃</span><span id="graph-quality" class="badge">불러오는 중</span></div><p id="graph-current-status" class="note">수신 상태 확인 중</p></div><div class="graph-navigation"><button id="graph-to-display" class="secondary">숫자 화면</button><button id="graph-to-normal" class="secondary">일반 화면</button><button id="graph-settings" class="secondary">설정</button><button id="graph-speech" class="secondary">음성 시작</button><button id="graph-fullscreen">전체 화면</button></div></header>
     <div class="graph-toolbar">
+      <button id="graph-to-analysis" type="button" class="secondary">온도 분석</button>
       <div class="graph-intervals" role="group" aria-label="봉 간격"><button data-minutes="1" aria-pressed="true">1분봉</button><button data-minutes="5" aria-pressed="false">5분봉</button><button data-minutes="10" aria-pressed="false">10분봉</button></div>
       <label>조회 범위<select id="graph-span"><option value="60">최근 1시간</option><option value="360" selected>최근 6시간</option><option value="1440">최근 24시간</option></select></label>
       <label>기준 날짜<input id="graph-day" type="date"></label>
@@ -65,6 +68,82 @@
     <div class="quality-header"><strong>판독 상태</strong><span><i class="quality-key good"></i> 실측 · <i class="quality-key failed"></i> 실패 · <i class="quality-key mixed"></i> 혼합 · <i class="quality-key overdue"></i> 예정 초과 · <i class="quality-key scheduled"></i> 기록 예정 없음 · <i class="quality-key pending"></i> 기록 대기 · <i class="quality-key unknown"></i> 간격 미확인 · <i class="quality-key estimated"></i> 추정</span></div>
     <svg id="quality-chart" role="img" aria-label="온도 축과 분리한 판독 상태. 그래프와 같은 시간 구간입니다."></svg>
     <div id="graph-detail" aria-live="polite">그래프를 누르거나 좌우 방향키로 상세를 확인하세요.</div><p id="graph-status" role="status">저장 이력 대기 · 기본값 38도는 그래프에 넣지 않습니다.</p>
+  </section>
+  <section id="analysis-screen" aria-labelledby="analysis-title" hidden>
+    <header class="analysis-header">
+      <h1 id="analysis-title">TC-06 온도 분석</h1>
+      <nav aria-label="TC-06 화면 전환">
+        <button id="analysis-to-graph" type="button" class="secondary">온도 그래프</button>
+        <button id="analysis-to-normal" type="button" class="secondary">일반 화면</button>
+      </nav>
+    </header>
+    <form id="analysis-form" class="analysis-panel">
+      <div class="analysis-filters">
+        <label>근무 시작일<input id="analysis-day" type="date" required></label>
+        <label>12시간 조회 구간<select id="analysis-shift"><option value="day">주간조 · 08:00~20:00</option><option value="night">야간조 · 20:00~다음 날 08:00</option></select></label>
+        <label>비교 집계 기간<select id="analysis-days"><option value="1">기준일</option><option value="7" selected>최근 7일</option><option value="30">최근 30일</option></select></label>
+        <label>급변 기준 (℃)<input id="analysis-change" type="number" min="0.1" max="9999.9" step="0.1" value="5" required></label>
+        <label>최대 변동 시간 (분)<input id="analysis-window" type="number" min="1" max="60" value="5" required></label>
+        <button id="analysis-load" type="submit">조회</button>
+      </div>
+      <details id="analysis-period-settings">
+        <summary>지정 시간대 설정</summary>
+        <div id="analysis-period-list"></div>
+        <button id="analysis-add-period" type="button" class="secondary">시간대 추가</button>
+        <p class="analysis-note">지정 시간대는 같은 날의 시작·종료 시각을 입력한 뒤 조회하면 적용됩니다.</p>
+      </details>
+    </form>
+    <p id="analysis-status" role="status"></p>
+    <div id="analysis-content" hidden>
+      <section class="analysis-panel" aria-labelledby="analysis-summary-title">
+        <div class="analysis-section-header">
+          <h2 id="analysis-summary-title">온도 집계</h2>
+          <div class="analysis-switch" role="group" aria-label="집계 단위">
+            <button id="analysis-hourly" type="button" aria-pressed="true">시간별</button>
+            <button id="analysis-daily" type="button" aria-pressed="false">일별</button>
+            <button id="analysis-shifts" type="button" aria-pressed="false">조별</button>
+            <button id="analysis-periods" type="button" aria-pressed="false">지정 시간대</button>
+          </div>
+        </div>
+        <p id="analysis-summary-note" class="analysis-note"></p>
+        <div id="analysis-bars" class="analysis-bars" role="group" aria-label="급등·급락 횟수"></div>
+        <div class="analysis-table-wrap">
+          <table>
+            <thead><tr><th scope="col">구간</th><th scope="col">평균 ℃</th><th scope="col">급등</th><th scope="col">급락</th><th scope="col">최저 ℃</th><th scope="col">최고 ℃</th><th scope="col">실측</th><th scope="col">판독 실패</th></tr></thead>
+            <tbody id="analysis-rows"></tbody>
+          </table>
+        </div>
+        <p class="analysis-note analysis-table-tip">표를 가로로 밀면 최저·최고와 판독 건수를 볼 수 있습니다.</p>
+      </section>
+      <section id="analysis-detail" class="analysis-panel" aria-labelledby="analysis-chart-title">
+        <div class="analysis-section-header">
+          <div><h2 id="analysis-chart-title">온도와 보조지표</h2><p id="analysis-chart-period" class="analysis-note"></p></div>
+          <button id="analysis-reset-range" class="secondary" type="button" hidden>선택한 조 전체</button>
+        </div>
+        <div class="analysis-indicators" role="group" aria-label="보조지표">
+          <label><input id="analysis-average" type="checkbox" checked> 이동평균선 5·30분</label>
+          <label><input id="analysis-bands" type="checkbox"> 볼린저 밴드 30분</label>
+          <label><input id="analysis-macd-toggle" type="checkbox"> MACD 12·26·9</label>
+        </div>
+        <div class="analysis-legend" aria-label="차트 범례">
+          <span><i class="analysis-swatch-measured"></i>실측</span>
+          <span id="analysis-average-legend"><i class="analysis-swatch-ma5"></i>5분선 <i class="analysis-swatch-ma30"></i>30분선</span>
+          <span id="analysis-band-legend" hidden><i class="analysis-swatch-band"></i>볼린저 범위</span>
+          <span id="analysis-macd-legend" hidden><i class="analysis-swatch-macd"></i>MACD <i class="analysis-swatch-signal"></i>시그널</span>
+        </div>
+        <div id="analysis-plot">
+          <svg id="analysis-temperature-chart" role="img" aria-label="실측 온도와 선택한 보조지표"></svg>
+          <svg id="analysis-macd-chart" role="img" aria-label="MACD, 시그널선과 히스토그램" hidden></svg>
+        </div>
+        <p id="analysis-chart-note" class="analysis-note"></p>
+        <div class="analysis-section-header">
+          <h2>급등·급락 기록</h2>
+          <a id="analysis-original" class="analysis-link" href="/?mode=graph" hidden>원래 온도 그래프 열기</a>
+        </div>
+        <p id="analysis-event-detail" class="analysis-note" hidden></p>
+        <ol id="analysis-events"></ol>
+      </section>
+    </div>
   </section>
   <nav id="display-menu" aria-label="디스플레이 메뉴" hidden><button id="normal-mode">일반 화면</button><button id="display-settings" class="secondary">설정</button><button id="display-to-graph" class="secondary">그래프</button><button id="display-speech" class="secondary">음성 시작</button><button id="display-fullscreen" class="secondary">전체 화면</button><button id="display-refresh" class="secondary">지금 새로고침</button><p id="display-refresh-status" role="status">방향키로 이동 · 확인 버튼으로 선택</p></nav>
   <p id="display-state" role="status">불러오는 중</p>
